@@ -5,7 +5,13 @@ from __future__ import annotations
 import json
 
 from ai_code_review.diff.parser import parse_unified_diff
-from ai_code_review.models.finding import Finding, Rationale, Suggestion, Summary
+from ai_code_review.models.finding import (
+    FilteredFinding,
+    Finding,
+    Rationale,
+    Suggestion,
+    Summary,
+)
 from ai_code_review.models.review import Author
 from ai_code_review.models.rule import AppliesTo, Rule, RuleSource, Trigger
 from ai_code_review.report.builder import ReportBuildInput, build_report, report_to_dict
@@ -54,7 +60,9 @@ def _rule() -> Rule:
 
 
 def _input(
-    findings: list[Finding] | None = None, rules: list[Rule] | None = None
+    findings: list[Finding] | None = None,
+    rules: list[Rule] | None = None,
+    filtered_findings: tuple[FilteredFinding, ...] = (),
 ) -> ReportBuildInput:
     return ReportBuildInput(
         diff=parse_unified_diff(_DIFF),
@@ -68,6 +76,7 @@ def _input(
         rules_total=10,
         rules_after_filter=1,
         rules_dropped_by_l4=(),
+        filtered_findings=filtered_findings,
         author=Author(name="LW", role="L4"),
         branch="feature/x",
         target="main",
@@ -93,6 +102,7 @@ class TestTopLevel:
         assert m.summary == "A short summary."
         assert m.rules_total == 10
         assert m.rules_after_filter == 1
+        assert m.filtered_findings == ()
 
 
 class TestFilesAggregation:
@@ -208,3 +218,27 @@ class TestSerialization:
         report = build_report(_input(findings=[f_no_sug]))
         d = report_to_dict(report)
         assert d["findings"][0]["suggestion"] is None
+
+    def test_filtered_findings_serialized_in_metadata(self) -> None:
+        filtered = (
+            FilteredFinding(
+                reason="unknown_rule",
+                rule_id="RULE-X",
+                file="foo/bar.py",
+                line=2,
+                detail="not recalled",
+            ),
+        )
+
+        report = build_report(_input(filtered_findings=filtered))
+        d = report_to_dict(report)
+
+        assert d["review"]["metadata"]["filtered_findings"] == [
+            {
+                "reason": "unknown_rule",
+                "rule_id": "RULE-X",
+                "file": "foo/bar.py",
+                "line": 2,
+                "detail": "not recalled",
+            }
+        ]

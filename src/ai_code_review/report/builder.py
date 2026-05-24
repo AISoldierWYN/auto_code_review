@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from ai_code_review.models.diff import FileChange, Hunk
-from ai_code_review.models.finding import Finding, Rationale, Summary
+from ai_code_review.models.finding import FilteredFinding, Finding, Rationale, Summary
 from ai_code_review.models.review import (
     Author,
     FileSummary,
@@ -39,6 +39,7 @@ class ReportBuildInput:
     rules_total: int
     rules_after_filter: int
     rules_dropped_by_l4: tuple[str, ...] = ()
+    filtered_findings: tuple[FilteredFinding, ...] = ()
     review_language: str = "en"
     author: Author | None = None
     branch: str | None = None
@@ -137,6 +138,7 @@ def build_report(inp: ReportBuildInput) -> ReviewReport:
         rules_total=inp.rules_total,
         rules_after_filter=inp.rules_after_filter,
         rules_dropped_by_l4=inp.rules_dropped_by_l4,
+        filtered_findings=inp.filtered_findings,
         review_language=inp.review_language,
     )
 
@@ -176,6 +178,16 @@ def _meta_to_dict(m: ReviewMeta) -> dict:
             "rules_total": m.rules_total,
             "rules_after_filter": m.rules_after_filter,
             "rules_dropped_by_l4": list(m.rules_dropped_by_l4),
+            "filtered_findings": [
+                {
+                    "reason": filtered.reason,
+                    "rule_id": filtered.rule_id,
+                    "file": filtered.file,
+                    "line": filtered.line,
+                    "detail": filtered.detail,
+                }
+                for filtered in m.filtered_findings
+            ],
         },
     }
 

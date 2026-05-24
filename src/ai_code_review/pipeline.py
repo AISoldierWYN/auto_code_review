@@ -23,13 +23,18 @@ from pathlib import Path
 from ai_code_review.diff.parser import parse_unified_diff
 from ai_code_review.diff.sources import ChangeBundle
 from ai_code_review.models.diff import FileChange
-from ai_code_review.models.finding import Finding, Summary
+from ai_code_review.models.finding import FilteredFinding, Finding, Summary
 from ai_code_review.models.review import Author, ReviewReport
 from ai_code_review.models.rule import Rule
 from ai_code_review.report.builder import ReportBuildInput, build_report
 from ai_code_review.review.agent import AgentRunner
-from ai_code_review.review.parser import parse_agent_output
-from ai_code_review.review.prompt import build_prompts, normalize_review_language
+from ai_code_review.review.parser import OutputParseError, parse_agent_output
+from ai_code_review.review.prompt import (
+    build_output_repair_prompts,
+    build_prompts,
+    normalize_review_language,
+)
+from ai_code_review.review.validator import validate_and_filter_findings
 from ai_code_review.rules.loader import load_rules
 from ai_code_review.rules.recaller import recall_rules
 
@@ -134,6 +139,7 @@ def _build_pipeline_report(
     scanned_seconds: float,
     rules_total: int,
     rules_dropped_by_l4: tuple[str, ...] = (),
+    filtered_findings: tuple[FilteredFinding, ...] = (),
 ) -> ReviewReport:
     title = inp.title or "review"
     return build_report(
@@ -149,6 +155,7 @@ def _build_pipeline_report(
             rules_total=rules_total,
             rules_after_filter=len(rules_used),
             rules_dropped_by_l4=rules_dropped_by_l4,
+            filtered_findings=filtered_findings,
             review_language=inp.review_language,
             author=inp.author,
             branch=inp.branch,
@@ -195,15 +202,29 @@ async def run_review(inp: ReviewInput, runner: AgentRunner) -> ReviewReport:
     agent_result = await runner.run(prompts, inp.workspace)
     elapsed = time.monotonic() - started
 
-    parsed = parse_agent_output(agent_result.text)
+    try:
+        parsed = parse_agent_output(agent_result.text)
+    except OutputParseError as exc:
+        repair_prompts = build_output_repair_prompts(
+            skill=skill_text,
+            raw_output=agent_result.text,
+            parse_error=str(exc),
+            review_language=inp.review_language,
+        )
+        repair_result = await runner.run(repair_prompts, inp.workspace)
+        elapsed = time.monotonic() - started
+        parsed = parse_agent_output(repair_result.text)
+
+    validation = validate_and_filter_findings(parsed.findings, diff, recalled)
 
     return _build_pipeline_report(
         inp=inp,
         diff=diff,
-        findings=list(parsed.findings),
+        findings=list(validation.findings),
         summary=parsed.summary,
         rules_used=recalled,
         scanned_seconds=elapsed,
         rules_total=len(all_rules),
         rules_dropped_by_l4=recall.dropped_by_l4,
+        filtered_findings=validation.filtered_findings,
     )

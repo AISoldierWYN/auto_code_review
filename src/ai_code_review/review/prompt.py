@@ -96,3 +96,35 @@ def build_prompts(
         f"{diff_text}\n"
     )
     return Prompts(system_prompt=skill, user_prompt=user_prompt)
+
+
+def build_output_repair_prompts(
+    skill: str,
+    raw_output: str,
+    parse_error: str,
+    review_language: str | None = "en",
+) -> Prompts:
+    """Ask the agent to repair its previous output into the required schema."""
+    user_prompt = (
+        "# OUTPUT_REPAIR\n"
+        "Your previous response could not be parsed by the review pipeline.\n"
+        "Rewrite it into the exact required fenced YAML format from the system "
+        "prompt: zero or more ```finding blocks, exactly one ```summary block, "
+        "then END_OF_REVIEW.\n"
+        "Do not invent new findings. Preserve the same rule ids, files, line "
+        "numbers, severity, category, confidence, title, body, and suggestions "
+        "when they are present. If a finding is too incomplete to repair, drop "
+        "that finding. Always emit a summary block.\n"
+        "\n"
+        "# OUTPUT_LANGUAGE\n"
+        f"{_language_instruction(review_language)}\n"
+        "\n"
+        "# PARSE_ERROR\n"
+        f"{parse_error}\n"
+        "\n"
+        "# RAW_OUTPUT\n"
+        "```text\n"
+        f"{raw_output}\n"
+        "```\n"
+    )
+    return Prompts(system_prompt=skill, user_prompt=user_prompt)

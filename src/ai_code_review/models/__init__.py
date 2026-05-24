@@ -6,7 +6,13 @@ module boundaries without coupling.
 """
 
 from ai_code_review.models.diff import FileChange, Hunk, HunkLine
-from ai_code_review.models.finding import Finding, Rationale, Suggestion, Summary
+from ai_code_review.models.finding import (
+    FilteredFinding,
+    Finding,
+    Rationale,
+    Suggestion,
+    Summary,
+)
 from ai_code_review.models.review import (
     Author,
     FileSummary,
@@ -20,6 +26,7 @@ __all__ = [
     "Author",
     "FileChange",
     "FileSummary",
+    "FilteredFinding",
     "Finding",
     "Hunk",
     "HunkLine",

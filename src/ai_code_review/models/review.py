@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ai_code_review.models.finding import Finding
+from ai_code_review.models.finding import FilteredFinding, Finding
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,7 @@ class ReviewMeta:
     rules_total: int
     rules_after_filter: int
     rules_dropped_by_l4: tuple[str, ...] = ()
+    filtered_findings: tuple[FilteredFinding, ...] = ()
     review_language: str = "en"
 
 

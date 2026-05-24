@@ -44,5 +44,16 @@ class Finding:
 
 
 @dataclass(frozen=True)
+class FilteredFinding:
+    """A parsed model finding that was rejected before report rendering."""
+
+    reason: str
+    rule_id: str
+    file: str
+    line: int | None
+    detail: str
+
+
+@dataclass(frozen=True)
 class Summary:
     text: str

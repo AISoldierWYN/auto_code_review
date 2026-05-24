@@ -7,6 +7,7 @@ from pathlib import Path
 from ai_code_review.models.rule import AppliesTo, OriginalCase, Rule, RuleSource, Trigger
 from ai_code_review.review.prompt import (
     Prompts,
+    build_output_repair_prompts,
     build_prompts,
     normalize_review_language,
 )
@@ -88,6 +89,22 @@ class TestNoRulesCase:
         assert "# SKILL CONTENT" in p.system_prompt
         # Indicate to agent there are no rules — this prevents hallucinated findings.
         assert "no applicable rules" in p.user_prompt.lower() or "rules: []" in p.user_prompt.lower()
+
+
+class TestBuildOutputRepairPrompts:
+    def test_repair_prompt_preserves_skill_and_raw_output(self) -> None:
+        prompts = build_output_repair_prompts(
+            skill=_SKILL,
+            raw_output="bad output",
+            parse_error="no summary block found",
+            review_language="zh",
+        )
+
+        assert prompts.system_prompt == _SKILL
+        assert "# OUTPUT_REPAIR" in prompts.user_prompt
+        assert "bad output" in prompts.user_prompt
+        assert "no summary block found" in prompts.user_prompt
+        assert "Simplified Chinese" in prompts.user_prompt
 
 
 class TestNormalizeReviewLanguage:

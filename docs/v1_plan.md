@@ -311,7 +311,7 @@ options = ClaudeAgentOptions(
 | **第 0 步** | SDK 可用性 + 端点切换验证 | 已有 `.env.example`、EndpointConfig、两个 smoke 脚本 | 补强制 `Read/Grep` tool_use smoke；接 pre-commit/CI |
 | **第 1 步** | 跑通最小闭环 | 已完成 diff → rules → prompt → agent → parser → review.json；本地 diff/GitHub PR source 可用 | `before/` + diff 自动生成 `workspace/` 可后置 |
 | **第 2 步** | 规则资产 + 召回质量 | 已完成:20 条 `typical_case` 规则、Android case fixtures、L1/L2/L3/L4 召回、规则审计、case 覆盖、negative case、按文件分片 plan | 持续运营:bug_history 真实素材、更多 case、UI 展示 |
-| **第 3 步** | 结构化输出 + 分级 + 噪音过滤 | 目前靠 fenced YAML + parser 校验 | 输出修复/重试、unknown rule 丢弃、去重、置信度阈值、`report_finding` 工具或 hook |
+| **第 3 步** | 结构化输出 + 分级 + 噪音过滤 | 已完成:fenced YAML parser、parse repair、validator/filter、filtered metadata、去重与置信度阈值 | 中期增强:`report_finding` 工具或 hook |
 | **第 4 步** | 嵌入 MR 流程 | GitHub diff 拉取已提前可用；回写未接 | GitHub/Gerrit/GitLab publisher、webhook/dry-run、评论幂等、可选 gating |
 | **第 5 步** | UI 接入与 reviewer 工作台 | 已有 aiohttp server、`/api/review`、`/api/chat`、本地/GitHub 输入、Markdown chat | 去 mock 化、真实 History/Stats、copy/post 操作、配置持久化、运行记录 |
 
@@ -353,18 +353,18 @@ Stage 2 完成标准:
 ### Stage 3 详细计划:结构化输出与噪音过滤
 
 1. **生成侧强约束**
-   - 短期:保留 fenced YAML,增加 parse failure 后的一次 repair prompt。
+   - 已完成:保留 fenced YAML,增加 parse failure 后的一次 repair prompt。
    - 中期:实现 `report_finding` 工具或 PostToolUse hook,由 schema 强制字段类型。
 2. **结果校验**
-   - `rule_id` 不在本次 recalled rules 中的 finding 直接丢弃或转为 parse error。
-   - severity/category 必须等于规则定义,不允许模型自行升降级。
-   - line 必须落在 diff 的 `+` 行;不在 diff 内则丢弃。
+   - 已完成:`rule_id` 不在本次 recalled rules 中的 finding 直接丢弃。
+   - 已完成:severity/category 必须等于规则定义,不允许模型自行升降级。
+   - 已完成:line 必须落在 diff 的 `+` 行;不在 diff 内则丢弃。
 3. **噪音过滤**
-   - `(rule_id,file,line)` 去重。
-   - 低于配置阈值的 confidence 丢弃或降级隐藏。
-   - 增加 linter-overlap denylist,避免格式、未使用变量、纯命名建议。
+   - 已完成:`(rule_id,file,line)` 去重。
+   - 已完成:低于配置阈值的 confidence 丢弃。
+   - 已完成:linter-overlap denylist,避免格式、未使用变量、纯命名建议。
 4. **报告增强**
-   - 输出 `review.metadata.filtered_findings` 记录丢弃原因。
+   - 已完成:输出 `review.metadata.filtered_findings` 记录丢弃原因。
    - UI 展示"为什么没显示某条模型输出"只对 debug 模式开放。
 
 Stage 3 完成标准:

@@ -47,15 +47,28 @@ _FAKE_AGENT_OUTPUT = dedent(
 @dataclass
 class _FakeRunner:
     captured: list[Prompts]
+    output: str = _FAKE_AGENT_OUTPUT
 
     async def run(self, prompts: Prompts, workspace: Path) -> AgentRunResult:
         self.captured.append(prompts)
-        return AgentRunResult(text=_FAKE_AGENT_OUTPUT, is_error=False, used_tools=("Read",))
+        return AgentRunResult(text=self.output, is_error=False, used_tools=("Read",))
 
 
 class _FailingRunner:
     async def run(self, prompts: Prompts, workspace: Path) -> AgentRunResult:
         raise AssertionError("runner should not be called when no rules are recalled")
+
+
+@dataclass
+class _SequentialRunner:
+    outputs: list[str]
+    captured: list[Prompts]
+
+    async def run(self, prompts: Prompts, workspace: Path) -> AgentRunResult:
+        self.captured.append(prompts)
+        if not self.outputs:
+            raise AssertionError("runner called too many times")
+        return AgentRunResult(text=self.outputs.pop(0), is_error=False, used_tools=())
 
 
 def test_pipeline_end_to_end_with_fake_runner(tmp_path: Path) -> None:
@@ -116,3 +129,102 @@ def test_pipeline_skips_agent_when_no_rules_recalled(tmp_path: Path) -> None:
     assert report.review.rules_total == 0
     assert report.review.rules_after_filter == 0
     assert "No applicable review rules" in report.review.summary
+
+
+def test_pipeline_filters_invalid_model_findings_before_report() -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    case_dir = project_root / "tests" / "cases" / "case_resource_leak"
+    noisy_output = dedent(
+        """\
+        ```finding
+        rule_id: RULE-RESOURCE-001
+        file: examples/stage_1_demo/cache_loader.py
+        line: 11
+        severity: critical
+        category: resource
+        confidence: 0.91
+        title: valid
+        body: valid
+        suggestion_kind: none
+        suggestion_remove: []
+        suggestion_add: []
+        suggestion_text: ""
+        ```
+
+        ```finding
+        rule_id: RULE-UNKNOWN-001
+        file: examples/stage_1_demo/cache_loader.py
+        line: 12
+        severity: critical
+        category: resource
+        confidence: 0.91
+        title: unknown
+        body: unknown
+        suggestion_kind: none
+        suggestion_remove: []
+        suggestion_add: []
+        suggestion_text: ""
+        ```
+
+        ```finding
+        rule_id: RULE-RESOURCE-001
+        file: examples/stage_1_demo/cache_loader.py
+        line: 11
+        severity: critical
+        category: resource
+        confidence: 0.80
+        title: duplicate
+        body: duplicate
+        suggestion_kind: none
+        suggestion_remove: []
+        suggestion_add: []
+        suggestion_text: ""
+        ```
+
+        ```summary
+        text: one valid finding plus model noise.
+        ```
+
+        END_OF_REVIEW
+        """
+    )
+
+    review_input = ReviewInput.from_local_file(
+        diff_path=case_dir / "change.diff",
+        workspace=case_dir / "workspace",
+        rules_dir=case_dir / "rules",
+        skill_path=project_root / "skills" / "code_review.md",
+        model="glm-5",
+        title="demo",
+    )
+
+    report = asyncio.run(run_review(review_input, _FakeRunner(captured=[], output=noisy_output)))
+
+    assert [finding.title for finding in report.findings] == ["valid"]
+    assert [item.reason for item in report.review.filtered_findings] == [
+        "unknown_rule",
+        "duplicate",
+    ]
+
+
+def test_pipeline_repairs_unparseable_agent_output_once() -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    case_dir = project_root / "tests" / "cases" / "case_resource_leak"
+    bad_output = "I found a problem but forgot the fenced YAML blocks."
+    runner = _SequentialRunner(outputs=[bad_output, _FAKE_AGENT_OUTPUT], captured=[])
+
+    review_input = ReviewInput.from_local_file(
+        diff_path=case_dir / "change.diff",
+        workspace=case_dir / "workspace",
+        rules_dir=case_dir / "rules",
+        skill_path=project_root / "skills" / "code_review.md",
+        model="glm-5",
+        title="demo",
+    )
+
+    report = asyncio.run(run_review(review_input, runner))
+
+    assert len(runner.captured) == 2
+    assert "# OUTPUT_REPAIR" in runner.captured[1].user_prompt
+    assert "fenced YAML" in runner.captured[1].user_prompt
+    assert len(report.findings) == 1
