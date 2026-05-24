@@ -23,6 +23,14 @@ recall:
   regexes:
     - "new\\s+File\\s*\\([^,]+,\\s*[^)]*\\.getName\\s*\\(\\s*\\)"
     - "ZipEntry\\s+\\w+\\s*=\\s*\\w+\\.getNextEntry\\s*\\("
+  exclude_keywords:
+    - "getCanonicalPath"
+    - "getCanonicalFile"
+    - "canonicalRoot"
+    - "canonicalTarget"
+  exclude_regexes:
+    - "\\.normalize\\s*\\(\\s*\\)"
+    - "startsWith\\s*\\(\\s*canonical"
 
 trigger:
   description: |

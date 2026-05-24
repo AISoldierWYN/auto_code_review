@@ -1,0 +1,9 @@
+name: case_android_app_zip_slip_safe_unpack
+description: Android APP zip extraction validates canonical child paths before writing entries
+language_hint: java
+expected:
+  findings: []
+  forbidden_rules:
+    - RULE-ANDROID-APP-013
+  forbid_other_critical: false
+  summary_substring: null

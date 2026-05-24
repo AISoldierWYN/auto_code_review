@@ -122,6 +122,12 @@ def _parse_rule(data: dict, file: Path) -> Rule:
         recall = RecallHints(
             keywords=_as_tuple(recall_raw.get("keywords"), f"{where}.recall.keywords"),
             regexes=_as_tuple(recall_raw.get("regexes"), f"{where}.recall.regexes"),
+            exclude_keywords=_as_tuple(
+                recall_raw.get("exclude_keywords"), f"{where}.recall.exclude_keywords"
+            ),
+            exclude_regexes=_as_tuple(
+                recall_raw.get("exclude_regexes"), f"{where}.recall.exclude_regexes"
+            ),
         )
 
     return Rule(

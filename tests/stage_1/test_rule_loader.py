@@ -123,6 +123,8 @@ class TestLoadRules:
             "recall:\n"
             "  keywords: [\"open(\", \"close()\"]\n"
             "  regexes: [\"open\\\\s*\\\\(\"]\n"
+            "  exclude_keywords: [\"with open\"]\n"
+            "  exclude_regexes: [\"try\\\\s*\\\\{\"]\n"
             "trigger:\n",
         )
         _write(tmp_path / "with_recall.yaml", with_recall)
@@ -131,6 +133,8 @@ class TestLoadRules:
 
         assert rule.recall.keywords == ("open(", "close()")
         assert rule.recall.regexes == ("open\\s*\\(",)
+        assert rule.recall.exclude_keywords == ("with open",)
+        assert rule.recall.exclude_regexes == ("try\\s*\\{",)
 
     def test_recall_hints_must_be_lists(self, tmp_path: Path) -> None:
         bad = VALID_RULE.replace(

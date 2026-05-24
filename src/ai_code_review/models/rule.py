@@ -41,6 +41,8 @@ class RecallHints:
 
     keywords: tuple[str, ...] = ()
     regexes: tuple[str, ...] = ()
+    exclude_keywords: tuple[str, ...] = ()
+    exclude_regexes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

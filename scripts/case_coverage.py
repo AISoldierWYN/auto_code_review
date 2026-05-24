@@ -33,6 +33,11 @@ def main() -> None:
         help="exit with status 2 when any expected rule is not recalled",
     )
     parser.add_argument(
+        "--fail-on-forbidden-recalls",
+        action="store_true",
+        help="exit with status 4 when any forbidden rule is recalled",
+    )
+    parser.add_argument(
         "--fail-on-uncovered",
         action="store_true",
         help="exit with status 3 when production rules have no expected case",
@@ -56,6 +61,8 @@ def main() -> None:
         raise SystemExit(2)
     if args.fail_on_uncovered and report.uncovered_rule_ids:
         raise SystemExit(3)
+    if args.fail_on_forbidden_recalls and report.forbidden_recall_hits:
+        raise SystemExit(4)
 
 
 if __name__ == "__main__":

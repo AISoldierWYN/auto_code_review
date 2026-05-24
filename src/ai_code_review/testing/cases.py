@@ -42,6 +42,7 @@ class ExpectedFinding:
 @dataclass(frozen=True)
 class ExpectedOutcome:
     findings: tuple[ExpectedFinding, ...]
+    forbidden_rule_ids: tuple[str, ...] = ()
     forbid_other_critical: bool = False
     summary_substring: str | None = None
 
@@ -89,9 +90,20 @@ def _parse_expected(data: dict, where: str) -> ExpectedOutcome:
         )
     return ExpectedOutcome(
         findings=tuple(findings),
+        forbidden_rule_ids=_as_str_tuple(
+            data.get("forbidden_rules"), f"{where}.forbidden_rules"
+        ),
         forbid_other_critical=bool(data.get("forbid_other_critical", False)),
         summary_substring=data.get("summary_substring"),
     )
+
+
+def _as_str_tuple(value: Any, where: str) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise CaseLoadError(f"{where}: expected a list, got {type(value).__name__}")
+    return tuple(str(item) for item in value)
 
 
 def load_case(

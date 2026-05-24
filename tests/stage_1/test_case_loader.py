@@ -127,6 +127,26 @@ class TestLoadCase:
         case = load_case(case_dir)
         assert case.expected.findings[0].line_range == (3, 3)
 
+    def test_parses_forbidden_rules_for_negative_cases(self, tmp_path: Path) -> None:
+        case_dir = _make_case(
+            tmp_path,
+            case_yaml=dedent(
+                """\
+                name: case_demo
+                description: x
+                expected:
+                  findings: []
+                  forbidden_rules:
+                    - RULE-X-002
+                    - RULE-X-003
+                """
+            ),
+        )
+
+        case = load_case(case_dir)
+
+        assert case.expected.forbidden_rule_ids == ("RULE-X-002", "RULE-X-003")
+
 
 class TestRulesFallback:
     def test_case_local_rules_take_precedence(self, tmp_path: Path) -> None:

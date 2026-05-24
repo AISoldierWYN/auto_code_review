@@ -23,9 +23,10 @@ def test_current_cases_cover_seed_rules_and_recall_expected_rules() -> None:
 
     report = build_case_coverage_report(rules, cases)
 
-    assert report.total_cases >= 8
+    assert report.total_cases >= 9
     assert report.total_rules >= 20
     assert report.total_expected_findings >= 8
+    assert report.total_forbidden_rules >= 1
     assert "RULE-ANDROID-APP-001" in report.covered_rule_ids
     assert report.cases_by_rule["RULE-ANDROID-APP-001"] == (
         "case_android_app_main_thread_refresh_io",
@@ -35,7 +36,16 @@ def test_current_cases_cover_seed_rules_and_recall_expected_rules() -> None:
     )
     assert "RULE-ANDROID-APP-003" in report.uncovered_rule_ids
     assert report.unknown_expected_rule_ids == ()
+    assert report.unknown_forbidden_rule_ids == ()
     assert report.recall_misses == ()
+    assert report.forbidden_recall_hits == ()
+    safe_zip_summary = next(
+        summary
+        for summary in report.case_summaries
+        if summary.case_name == "case_android_app_zip_slip_safe_unpack"
+    )
+    assert safe_zip_summary.forbidden_rule_ids == ("RULE-ANDROID-APP-013",)
+    assert safe_zip_summary.forbidden_recalled_rule_ids == ()
 
 
 def test_case_coverage_can_be_limited_to_android_cases() -> None:
@@ -52,6 +62,7 @@ def test_case_coverage_can_be_limited_to_android_cases() -> None:
     assert "RULE-RESOURCE-001" in report.uncovered_rule_ids
     assert "RULE-ANDROID-FWK-001" in report.covered_rule_ids
     assert report.recall_misses == ()
+    assert report.forbidden_recall_hits == ()
 
 
 def test_case_coverage_reports_recall_miss_when_signal_does_not_match(
@@ -164,6 +175,70 @@ def test_case_coverage_reports_unknown_expected_rule(tmp_path: Path) -> None:
     ]
 
 
+def test_case_coverage_reports_forbidden_recall_hit(tmp_path: Path) -> None:
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+    (rules_dir / "RULE-X-001.yaml").write_text(
+        dedent(
+            """\
+            rule_id: RULE-X-001
+            title: demo
+            category: security
+            severity: critical
+            source:
+              type: typical_case
+              refs: [demo]
+            applies_to:
+              languages: [java]
+              paths: ["**/*.java"]
+            trigger:
+              description: demo
+              signals: [danger]
+            risk: risk
+            suggestion: fix
+            recall:
+              keywords: [danger]
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    case_dir = tmp_path / "case_demo"
+    (case_dir / "workspace").mkdir(parents=True)
+    (case_dir / "workspace" / "Demo.java").write_text("class Demo {}\n", encoding="utf-8")
+    (case_dir / "change.diff").write_text(
+        "diff --git a/Demo.java b/Demo.java\n"
+        "--- a/Demo.java\n"
+        "+++ b/Demo.java\n"
+        "@@ -1 +1,2 @@\n"
+        " class Demo {}\n"
+        "+// danger is intentionally safe here\n",
+        encoding="utf-8",
+    )
+    (case_dir / "case.yaml").write_text(
+        dedent(
+            """\
+            name: case_demo
+            description: forbidden rule should not be recalled
+            expected:
+              findings: []
+              forbidden_rules:
+                - RULE-X-001
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    report = build_case_coverage_report(
+        load_rules(rules_dir),
+        discover_cases(tmp_path, fallback_rules_dir=rules_dir),
+    )
+
+    assert [(hit.case_name, hit.rule_id) for hit in report.forbidden_recall_hits] == [
+        ("case_demo", "RULE-X-001")
+    ]
+
+
 def test_case_coverage_markdown_includes_misses_and_uncovered_rules() -> None:
     rules = load_rules(RULES_ROOT)
     cases = discover_cases(CASES_ROOT, fallback_rules_dir=RULES_ROOT)
@@ -175,3 +250,4 @@ def test_case_coverage_markdown_includes_misses_and_uncovered_rules() -> None:
     assert "RULE-ANDROID-APP-001" in markdown
     assert "RULE-ANDROID-APP-003" in markdown
     assert "No recall misses." in markdown
+    assert "No forbidden recall hits." in markdown

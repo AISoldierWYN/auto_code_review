@@ -162,6 +162,59 @@ class TestL3SignalFilter:
 
         assert result.rules == ()
 
+    def test_exclude_keyword_drops_otherwise_matching_rule(self) -> None:
+        rules = [
+            _rule(
+                recall=RecallHints(
+                    keywords=("ZipInputStream",),
+                    exclude_keywords=("getCanonicalPath",),
+                )
+            )
+        ]
+        diff = [_filechange("x.py", language="python")]
+
+        result = recall_rules(
+            rules,
+            diff,
+            diff_text="+ ZipInputStream zip = openZip();\n+ target.getCanonicalPath();",
+        )
+
+        assert result.rules == ()
+
+    def test_exclude_regex_drops_otherwise_matching_rule(self) -> None:
+        rules = [
+            _rule(
+                recall=RecallHints(
+                    keywords=("ZipInputStream",),
+                    exclude_regexes=(r"canonicalRoot\s*=",),
+                )
+            )
+        ]
+        diff = [_filechange("x.py", language="python")]
+
+        result = recall_rules(
+            rules,
+            diff,
+            diff_text="+ ZipInputStream zip = openZip();\n+ String canonicalRoot = root;",
+        )
+
+        assert result.rules == ()
+
+    def test_invalid_exclude_regex_is_ignored(self) -> None:
+        rules = [
+            _rule(
+                recall=RecallHints(
+                    keywords=("open(",),
+                    exclude_regexes=("[",),
+                )
+            )
+        ]
+        diff = [_filechange("x.py", language="python")]
+
+        result = recall_rules(rules, diff, diff_text="+    f = open(path)")
+
+        assert result.rules == tuple(rules)
+
     def test_legacy_filter_rules_skips_l3_for_backward_compatibility(self) -> None:
         rules = [_rule(recall=RecallHints(keywords=("open(",)))]
         diff = [_filechange("x.py", language="python")]

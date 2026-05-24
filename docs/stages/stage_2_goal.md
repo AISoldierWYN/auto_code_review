@@ -52,4 +52,13 @@ L4 裁剪顺序：
 - 不在本阶段自动从历史 bug 批量生成规则。
 - 不在本阶段实现 hunk 级分片和 token 预算器。
 - 不在本阶段改造 UI 展示规则召回细节，只保证 JSON metadata 可消费。
+## Completion Note
+
+Stage 2 implementation now includes:
+
+- `recall.exclude_keywords` / `recall.exclude_regexes`
+- negative case checks through `expected.forbidden_rules`
+- `scripts/case_coverage.py`
+- file-level shard planning through `ai_code_review.review.shards`
+- `scripts/review_shards.py`
 

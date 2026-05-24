@@ -86,10 +86,21 @@ def _rule_has_signal(rule: Rule, diff_text: str | None) -> bool:
     """
     if diff_text is None:
         return True
+
+    lowered = diff_text.lower()
+    if any(keyword.lower() in lowered for keyword in rule.recall.exclude_keywords):
+        return False
+
+    for pattern in rule.recall.exclude_regexes:
+        try:
+            if re.search(pattern, diff_text, flags=re.IGNORECASE | re.MULTILINE):
+                return False
+        except re.error:
+            continue
+
     if not rule.recall.keywords and not rule.recall.regexes:
         return True
 
-    lowered = diff_text.lower()
     if any(keyword.lower() in lowered for keyword in rule.recall.keywords):
         return True
 

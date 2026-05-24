@@ -64,7 +64,7 @@ Stage 2 已有 L1/L2/L3/L4:
 
 ```text
 pytest tests/stage_2
-39 passed
+46 passed
 ```
 
 ## 5. 自审记录
@@ -125,3 +125,64 @@ CLI:
 - `uncovered_rule_ids`: 暂时没有 case 覆盖的生产规则。
 - `unknown_expected_rule_ids`: case 里声明了、但生产规则库没有的 rule id。
 - `recall_misses`: case 期望命中的规则没有被召回,包括 `rule_not_loaded` 和 `not_recalled`。
+
+## 9. Negative Case 与误召回
+
+`case.yaml` 支持负例:
+
+```yaml
+expected:
+  findings: []
+  forbidden_rules:
+    - RULE-ANDROID-APP-013
+```
+
+`scripts/case_coverage.py --fail-on-forbidden-recalls` 会在 forbidden rule 被召回时失败。
+规则也支持 recall 排除信号:
+
+```yaml
+recall:
+  keywords: ["ZipInputStream", "ZipEntry"]
+  exclude_keywords: ["getCanonicalPath", "getCanonicalFile"]
+  exclude_regexes: ["startsWith\\s*\\(\\s*canonical"]
+```
+
+当前负例:
+
+- `tests/cases/case_android_app_zip_slip_safe_unpack/`:安全 zip 解压,不应召回 `RULE-ANDROID-APP-013`。
+
+## 10. File-Level Shard Plan
+
+Stage 2 已实现按文件分片的 review plan。它不会立即改变生产 pipeline 的 agent 调用方式,
+但已经把"每个文件片段应该注入哪些规则"固化为可测试 API:
+
+```python
+from ai_code_review.review.shards import plan_file_review_shards
+
+plan = plan_file_review_shards(rules, diff_text)
+```
+
+CLI:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\review_shards.py --rules-dir rules --diff path\to\change.diff
+.\.venv\Scripts\python.exe scripts\review_shards.py --include-empty --rules-dir rules --diff path\to\change.diff
+```
+
+输出:
+
+- `shards`:需要 review 的文件片段及各自召回规则。
+- `skipped_paths`:没有召回规则、默认不需要 agent 调用的文件。
+- `dropped_by_l4`:该文件片段内因 max rules 裁剪被丢弃的规则。
+
+## 11. Stage 2 收口状态
+
+已完成:
+
+- 20 条 `typical_case` 规则。
+- `rules/bug_history/README.md` 入口与审计规则,真实素材等待用户继续补。
+- L1/L2/L3/L4 recall,含 `exclude_keywords` / `exclude_regexes`。
+- 规则审计报告、case coverage 报告、negative case 检查。
+- 按文件分片 review shard plan。
+
+Stage 2 后续只剩运营型补充:更多真实 bug_history 规则、更多正负例 case、把 audit/coverage 报告接入 UI。

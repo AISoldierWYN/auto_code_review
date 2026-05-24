@@ -16,7 +16,6 @@ applies_to:
 
 recall:
   keywords:
-    - "ContentResolver"
     - ".query("
     - "rawQuery("
     - "Cursor"
