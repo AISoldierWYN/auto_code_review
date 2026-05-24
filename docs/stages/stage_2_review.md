@@ -90,3 +90,37 @@ pytest tests/stage_2
 - `tests/cases/case_android_app_webview_bridge_untrusted_url/`
 - `tests/cases/case_android_app_sql_rawquery_injection/`
 - `tests/cases/case_android_fwk_binder_identity_restore/`
+
+## 8. Case 覆盖报告
+
+Stage 2 新增 case coverage 报告,用于回答两个问题:
+
+1. 当前哪些规则已经有 `tests/cases/` 回归样例覆盖。
+2. 每个 case 的 `expected.findings[].rule_id` 是否真的能通过 L1/L2/L3/L4 recall 进入 prompt。
+
+Python API:
+
+```python
+from ai_code_review.testing.case_coverage import (
+    build_case_coverage_report,
+    render_case_coverage_markdown,
+)
+
+report = build_case_coverage_report(rules, cases)
+markdown = render_case_coverage_markdown(report)
+```
+
+CLI:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\case_coverage.py --rules-dir rules --cases-root tests\cases
+.\.venv\Scripts\python.exe scripts\case_coverage.py --rules-dir rules --cases-root tests\cases --case-prefix case_android_
+.\.venv\Scripts\python.exe scripts\case_coverage.py --fail-on-recall-misses
+```
+
+报告会输出:
+
+- `covered_rule_ids`: 已有 expected case 的生产规则。
+- `uncovered_rule_ids`: 暂时没有 case 覆盖的生产规则。
+- `unknown_expected_rule_ids`: case 里声明了、但生产规则库没有的 rule id。
+- `recall_misses`: case 期望命中的规则没有被召回,包括 `rule_not_loaded` 和 `not_recalled`。
