@@ -306,35 +306,118 @@ options = ClaudeAgentOptions(
 
 ## 五、实施顺序
 
-| 阶段 | 目标 | 交付物 | 预估 |
-|------|------|--------|------|
-| **第 0 步** | SDK 可用性 + 端点切换验证 | Python venv + `claude-agent-sdk` 装好；跑通官方 quickstart（hello agent）；**用 `env` 注入第三方 `ANTHROPIC_BASE_URL` 跑同一个 demo,确认能成功调用**；记录两种端点的差异（速度、能力、tool_use 是否支持） | 0.5–1 天 |
-| **第 1 步** | 跑通最小闭环 | 喂一个 diff,挂一个最简规范 skill,能输出审查意见（自由文本即可,先不强求结构化） | 1–2 天 |
-| **第 2 步** | 啃历史 bug → 规则线 | 30–50 条 bug_history 规则 + 10–20 条 typical_case 规则 + 召回逻辑 | 1–2 周（最苦但最值） |
-| **第 3 步** | 结构化输出 + 分级 + 噪音过滤 | 强制 schema(`report_finding` 工具)、severity、rationale 必填、噪音过滤器 | 3–5 天 |
-| **第 4 步** | 嵌入 MR 流程 | GitLab / GitHub / Gerrit webhook 接入,评论回写 | 3–5 天 |
-| **第 5 步** | UI 接入 | pipeline 出 JSON → `ui/` 前端读取(替代 mock data);加载本地 diff 文件查看 review 结果 | 2–3 天 |
+| 阶段 | 目标 | 当前状态 | 剩余交付物 |
+|------|------|----------|------------|
+| **第 0 步** | SDK 可用性 + 端点切换验证 | 已有 `.env.example`、EndpointConfig、两个 smoke 脚本 | 补强制 `Read/Grep` tool_use smoke；接 pre-commit/CI |
+| **第 1 步** | 跑通最小闭环 | 已完成 diff → rules → prompt → agent → parser → review.json；本地 diff/GitHub PR source 可用 | `before/` + diff 自动生成 `workspace/` 可后置 |
+| **第 2 步** | 规则资产 + 召回质量 | 已有 19 条 `typical_case` 规则、Android case fixtures、L1/L2/L3/L4 召回 | 规则资产审计、bug_history 入口、更多 case、召回质量报告、大 diff 分片 |
+| **第 3 步** | 结构化输出 + 分级 + 噪音过滤 | 目前靠 fenced YAML + parser 校验 | 输出修复/重试、unknown rule 丢弃、去重、置信度阈值、`report_finding` 工具或 hook |
+| **第 4 步** | 嵌入 MR 流程 | GitHub diff 拉取已提前可用；回写未接 | GitHub/Gerrit/GitLab publisher、webhook/dry-run、评论幂等、可选 gating |
+| **第 5 步** | UI 接入与 reviewer 工作台 | 已有 aiohttp server、`/api/review`、`/api/chat`、本地/GitHub 输入、Markdown chat | 去 mock 化、真实 History/Stats、copy/post 操作、配置持久化、运行记录 |
 
-**第 0 步是新加的**——便宜但能拦截最贵的事故：
+### Stage 2 详细计划:规则资产与召回质量
 
-- 如果第三方端点不支持 tool_use,整个 agent 就跑不起来,越早发现越好
-- 如果端点切换会影响本地 CLI,要立刻调整方案
-- 这步走完之前别开始写规则库
+Stage 2 不阻塞在 `bug_history` 素材上。真实 bug 由团队同步收集；工程侧先把入口、校验、审计和回归体系搭好。
 
-第 1 步用官方 quickstart 改一改即可。**不要在第 1 步停留太久打磨细节**,重点是把链路打通后立刻进入第 2 步——业务规则才是护城河。
+1. **规则资产分层**
+   - `rules/typical_case/`: 通用陷阱。当前 Android APP/FWK 规则属于这一层,可继续扩展。
+   - `rules/bug_history/`: 真实项目 bug/事故/线上问题抽象规则。当前先建目录、README、模板与审计规则,允许为空。
+   - `rules/review_history/` 与 `rules/spec/`: 保留入口,不作为 v1 阻塞项。
+2. **规则质量门禁**
+   - 所有规则必须有 `source.refs`、`applies_to`、`trigger.signals`、`risk`、`suggestion`。
+   - Stage 2 新增 `RuleInventory`/audit 能力,输出按 `source.type`、category、severity、language 的统计。
+   - 对缺少 `recall.keywords/regexes` 的规则给 warning;对缺必填字段保持 loader hard fail。
+3. **召回质量**
+   - 保持 L1 语言、L2 路径、L3 recall hint、L4 priority cap。
+   - 新增 case-level 覆盖统计:每个 `tests/cases/*/case.yaml` 的 `expected_findings.rule_id` 必须能被召回。
+   - 后续加"负例 case":规则不该召回时必须不召回,用来压误报。
+4. **测试用例资产**
+   - 每条高价值 Android 规则至少 1 个复杂 diff fixture。
+   - fixture 继续使用 `change.diff` + `workspace/` after-state。
+   - bug_history 规则到位后,每条 bug_history 至少 1 个历史回归 case。
+5. **大 diff 策略**
+   - Stage 2 后半段实现按文件切片的 prompt 分批。
+   - 每批只注入该文件相关规则,最后合并 findings 并去重。
+   - 默认仍保留小 diff 单次 review 路径,避免过早复杂化。
 
-**第 5 步 — UI 接入(新加)**:
+Stage 2 完成标准:
 
-`ui/` 目录(`app.jsx` / `data.js` / 等)已经存在,目前用 `window.MOCK_*` 假数据驱动。
-Stage 5 做的事:
+- `scripts/rules_audit.py` 能给出规则库健康报告。
+- `pytest tests/stage_2` 覆盖规则加载、召回、fixture 覆盖和 audit。
+- `typical_case` 至少 20 条；`bug_history` 入口存在,但真实数量不阻塞当前开发。
+- Android APP/FWK 现有 case 全部可作为回归集运行。
 
-1. pipeline 跑完产出 `reviews/<run-id>/review.json`(schema 见 `docs/stages/stage_1_spec.md §4`)
-2. `ui/index.html` 改成从 `?review=<path>` URL 参数或本地拖拽加载 JSON
-3. 把 `data.js` 的 `window.MOCK_*` 替换为从 JSON 加载;mock 保留供前端独立开发用
-4. UI 顶部 Gerrit `cl` 单号位置先用 `diff_path` 顶位(JSON 里 `review.diff_path`)
-5. 后续用户加上 Gerrit / GitHub PR 识别后,JSON 多出 `cl` / `pr_url` 字段,UI 优先用这些
+### Stage 3 详细计划:结构化输出与噪音过滤
 
-Stage 5 **不做 HTTP server**——直接静态 HTML + 本地 JSON 文件够用;真上线再加 server。
+1. **生成侧强约束**
+   - 短期:保留 fenced YAML,增加 parse failure 后的一次 repair prompt。
+   - 中期:实现 `report_finding` 工具或 PostToolUse hook,由 schema 强制字段类型。
+2. **结果校验**
+   - `rule_id` 不在本次 recalled rules 中的 finding 直接丢弃或转为 parse error。
+   - severity/category 必须等于规则定义,不允许模型自行升降级。
+   - line 必须落在 diff 的 `+` 行;不在 diff 内则丢弃。
+3. **噪音过滤**
+   - `(rule_id,file,line)` 去重。
+   - 低于配置阈值的 confidence 丢弃或降级隐藏。
+   - 增加 linter-overlap denylist,避免格式、未使用变量、纯命名建议。
+4. **报告增强**
+   - 输出 `review.metadata.filtered_findings` 记录丢弃原因。
+   - UI 展示"为什么没显示某条模型输出"只对 debug 模式开放。
+
+Stage 3 完成标准:
+
+- parser/validator/filter 三层都有单测。
+- Agent 输出恶劣格式时不会把脏 finding 渲染到 UI。
+- 同一条问题不会重复刷屏。
+
+### Stage 4 详细计划:MR/PR 集成与回写
+
+1. **DiffSource 完整化**
+   - GitHub:补 token/private repo 路径、分页/错误提示、PR URL 回链。
+   - Gerrit:实现 URL 识别、patch 拉取、revision/patchset 元数据。
+   - GitLab:按需实现,优先级低于实际生产平台。
+2. **Publisher 抽象**
+   - 新增 `ReviewPublisher` Protocol: `publish(report, mode=dry_run|draft|submit)`。
+   - GitHub publisher:review comment 或 PR summary comment。
+   - Gerrit publisher:robot comment/draft comment,按文件+行号定位。
+3. **工作流入口**
+   - Webhook 接入:收到 PR/CL 事件后触发 review。
+   - CLI/HTTP dry-run:本地先生成即将发布的 payload,不真正写回。
+4. **幂等与安全**
+   - 每条评论带稳定 fingerprint,重复运行时 update 而不是重复发。
+   - critical gating 默认只 dry-run,真实 fail check 需要显式配置开启。
+
+Stage 4 完成标准:
+
+- 至少一个真实平台可以 dry-run + draft comment。
+- 失败时不影响源 PR/CL 状态。
+- 回写内容与 UI report 一致。
+
+### Stage 5 详细计划:UI 工作台去 mock 化
+
+当前 UI 已经从原计划的静态 JSON 提前升级为本地 aiohttp server。Stage 5 目标改为"真实 reviewer 工作台"。
+
+1. **数据源去 mock**
+   - `data.js` 仅作为 demo fallback。
+   - Result 页面全部从 `/api/review` 返回的 report 驱动。
+   - History/Stats/Team 移除假业务数据,改为真实 runs 存储或明确 demo 标签。
+2. **操作接实**
+   - `copy summary`:复制当前 report summary/Gerrit summary。
+   - `post to gerrit`:调用 Stage 4 publisher dry-run/submit。
+   - Apply/Dismiss/Reply:先本地状态持久化,后续接平台评论线程。
+3. **配置持久化**
+   - Review language、rules_dir、默认 source、模型配置进入本地配置文件或 server state。
+   - Settings 页面展示真实配置来源,不再展示不可用 host 假数据。
+4. **Chat 工作流**
+   - `/api/chat` 已可用,继续限制在当前 report/workspace 上下文。
+   - 支持 Markdown 渲染,保留 HTML escape。
+   - 后续支持"解释这条 finding 为什么触发"并展开原始案例。
+
+Stage 5 完成标准:
+
+- UI 不再把 demo 数据混入真实 review。
+- 核心按钮有真实行为或显式 disabled。
+- Chrome/Playwright 覆盖滚动、chat、summary、view mode、language。
 
 ---
 

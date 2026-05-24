@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from ai_code_review.models.diff import FileChange
 from ai_code_review.models.rule import AppliesTo, RecallHints, Rule, RuleSource, Trigger
 from ai_code_review.rules.recaller import filter_rules, recall_rules
