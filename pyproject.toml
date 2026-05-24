@@ -30,6 +30,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+pythonpath = ["src"]
 markers = [
     "integration: tests that hit external services (excluded from default run)",
 ]

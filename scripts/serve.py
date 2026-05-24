@@ -5,6 +5,8 @@ Endpoints:
   GET  /ui/*             → static files from ui/
   POST /api/review       → body {identifier, workspace?, rules_dir?, skill_path?}
                             returns the review.json shape
+  POST /api/publish      → body {review, platform?, target?, mode?}
+                            returns dry-run or submitted platform payloads
 
 The ``identifier`` may be:
   * a local diff file path (e.g. ``tests/cases/case_resource_leak/change.diff``)
@@ -22,7 +24,9 @@ import argparse
 import json
 import logging
 import traceback
+from dataclasses import asdict
 from pathlib import Path
+from typing import cast
 
 from aiohttp import web
 from dotenv import dotenv_values
@@ -34,6 +38,7 @@ from ai_code_review.diff.sources import (
     select_source,
 )
 from ai_code_review.pipeline import ReviewInput, run_review
+from ai_code_review.publish import PublishMode, ReviewPublisherError, create_publisher
 from ai_code_review.report.builder import report_to_dict
 from ai_code_review.review.agent import ClaudeSdkAgentRunner
 from ai_code_review.review.prompt import Prompts, normalize_review_language
@@ -328,6 +333,57 @@ async def handle_chat(request: web.Request) -> web.Response:
     return web.json_response({"answer": answer})
 
 
+def _infer_publish_platform(target: str) -> str | None:
+    if "github.com/" in target:
+        return "github"
+    if "/c/" in target or "/changes/" in target:
+        return "gerrit"
+    return None
+
+
+async def handle_publish(request: web.Request) -> web.Response:
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001
+        return web.json_response({"error": f"invalid JSON body: {exc}"}, status=400)
+
+    review = body.get("review") or body.get("report")
+    if not isinstance(review, dict):
+        return web.json_response({"error": "review is required"}, status=400)
+
+    review_meta = review.get("review") if isinstance(review.get("review"), dict) else {}
+    raw_target = body.get("target") or review_meta.get("diff_path")
+    target = str(raw_target).strip() if raw_target else ""
+
+    raw_platform = body.get("platform")
+    platform = str(raw_platform).strip().lower() if raw_platform else ""
+    if not platform and target:
+        platform = _infer_publish_platform(target) or ""
+    if not platform:
+        return web.json_response(
+            {"error": "platform is required when it cannot be inferred from target"},
+            status=400,
+        )
+
+    raw_mode = str(body.get("mode") or "dry_run").strip()
+    if raw_mode not in {"dry_run", "draft", "submit"}:
+        return web.json_response({"error": f"unsupported publish mode: {raw_mode}"}, status=400)
+
+    try:
+        publisher = create_publisher(platform, target=target or None)
+        result = await publisher.publish(review, mode=cast(PublishMode, raw_mode))
+    except ReviewPublisherError as exc:
+        return web.json_response({"error": str(exc)}, status=400)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("publish failed")
+        return web.json_response(
+            {"error": f"publish failed: {exc}", "trace": traceback.format_exc()},
+            status=502,
+        )
+
+    return web.json_response(asdict(result))
+
+
 async def handle_root(_: web.Request) -> web.Response:
     raise web.HTTPFound("/ui/index.html")
 
@@ -357,6 +413,7 @@ def build_app() -> web.Application:
     app["endpoint"] = _load_endpoint()
     app.router.add_post("/api/review", handle_review)
     app.router.add_post("/api/chat", handle_chat)
+    app.router.add_post("/api/publish", handle_publish)
     app.router.add_get("/", handle_root)
     app.router.add_get("/ui/{tail:.*}", handle_ui_asset)
     return app

@@ -207,7 +207,7 @@ class ChangeBundle:
 |------|----------------|--------|------|
 | `LocalDiffSource` | 本地 `.diff` 文件路径 | **Stage 1** | meta 字段全空,够跑 demo |
 | `GitHubDiffSource` | `https://github.com/<owner>/<repo>/pull/<N>` | **Stage 4** | 用 `pull/<N>.diff` + `api.github.com/repos/.../pulls/<N>`;PAT 可选(私库需要);本机已实测 github.com 可达 |
-| `GerritDiffSource` | Gerrit URL | Stage 4 接口预留 | 当前 PC 不可达内部 Gerrit;先 stub `NotImplementedError`,后续在可达环境补识别 + 认证逻辑 |
+| `GerritDiffSource` | Gerrit URL | **Stage 4** | 已实现 URL 识别、REST patch 拉取、XSSI/base64 decode 与 metadata 降级;真实内网认证需在可达环境继续验 |
 
 ### 5. 模型与认证
 
@@ -312,7 +312,7 @@ options = ClaudeAgentOptions(
 | **第 1 步** | 跑通最小闭环 | 已完成 diff → rules → prompt → agent → parser → review.json；本地 diff/GitHub PR source 可用 | `before/` + diff 自动生成 `workspace/` 可后置 |
 | **第 2 步** | 规则资产 + 召回质量 | 已完成:20 条 `typical_case` 规则、Android case fixtures、L1/L2/L3/L4 召回、规则审计、case 覆盖、negative case、按文件分片 plan | 持续运营:bug_history 真实素材、更多 case、UI 展示 |
 | **第 3 步** | 结构化输出 + 分级 + 噪音过滤 | 已完成:fenced YAML parser、parse repair、validator/filter、filtered metadata、去重与置信度阈值 | 中期增强:`report_finding` 工具或 hook |
-| **第 4 步** | 嵌入 MR 流程 | GitHub diff 拉取已提前可用；回写未接 | GitHub/Gerrit/GitLab publisher、webhook/dry-run、评论幂等、可选 gating |
+| **第 4 步** | 嵌入 MR 流程 | 已完成:GitHub/Gerrit DiffSource、ReviewPublisher 抽象、GitHub summary 回写、Gerrit review payload、CLI/HTTP dry-run、fingerprint 幂等 | 生产化增强:真实平台 live auth 验证、webhook、GitLab、GitHub inline comment、可选 gating |
 | **第 5 步** | UI 接入与 reviewer 工作台 | 已有 aiohttp server、`/api/review`、`/api/chat`、本地/GitHub 输入、Markdown chat | 去 mock 化、真实 History/Stats、copy/post 操作、配置持久化、运行记录 |
 
 ### Stage 2 详细计划:规则资产与召回质量
@@ -376,25 +376,25 @@ Stage 3 完成标准:
 ### Stage 4 详细计划:MR/PR 集成与回写
 
 1. **DiffSource 完整化**
-   - GitHub:补 token/private repo 路径、分页/错误提示、PR URL 回链。
-   - Gerrit:实现 URL 识别、patch 拉取、revision/patchset 元数据。
+   - 已完成 GitHub:token/private repo 路径、错误提示、PR URL 回链。
+   - 已完成 Gerrit:URL 识别、patch 拉取、revision 元数据与 metadata 降级。
    - GitLab:按需实现,优先级低于实际生产平台。
 2. **Publisher 抽象**
-   - 新增 `ReviewPublisher` Protocol: `publish(report, mode=dry_run|draft|submit)`。
-   - GitHub publisher:review comment 或 PR summary comment。
-   - Gerrit publisher:robot comment/draft comment,按文件+行号定位。
+   - 已完成 `ReviewPublisher` Protocol: `publish(report, mode=dry_run|draft|submit)`。
+   - 已完成 GitHub publisher:幂等 PR summary comment。
+   - 已完成 Gerrit publisher:review input payload,按文件+行号定位。
 3. **工作流入口**
-   - Webhook 接入:收到 PR/CL 事件后触发 review。
-   - CLI/HTTP dry-run:本地先生成即将发布的 payload,不真正写回。
+   - Webhook 接入:收到 PR/CL 事件后触发 review,后续生产化阶段再接。
+   - 已完成 CLI/HTTP dry-run:本地先生成即将发布的 payload,不真正写回。
 4. **幂等与安全**
-   - 每条评论带稳定 fingerprint,重复运行时 update 而不是重复发。
-   - critical gating 默认只 dry-run,真实 fail check 需要显式配置开启。
+   - 已完成 summary comment 稳定 fingerprint,GitHub 重复运行时 update 而不是重复发。
+   - critical gating 默认不接入,真实 fail check 需要后续显式配置开启。
 
 Stage 4 完成标准:
 
-- 至少一个真实平台可以 dry-run + draft comment。
-- 失败时不影响源 PR/CL 状态。
-- 回写内容与 UI report 一致。
+- 至少一个真实平台可以 dry-run + draft comment。当前 GitHub/Gerrit 均可 dry-run;Gerrit 可生成 draft payload。
+- 失败时不影响源 PR/CL 状态。当前默认 dry-run,submit 失败仅返回错误。
+- 回写内容与 UI report 一致。当前 payload 直接由 `review.json` findings/summary 生成。
 
 ### Stage 5 详细计划:UI 工作台去 mock 化
 
