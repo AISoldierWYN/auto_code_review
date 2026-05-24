@@ -1,0 +1,55 @@
+rule_id: RULE-ANDROID-APP-002
+title: APP Cursor 查询结果未关闭
+category: resource
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/reference/android/database/Cursor
+    - https://developer.android.com/reference/android/content/ContentResolver
+
+applies_to:
+  languages: [java, kotlin]
+  paths: ["**/*.java", "**/*.kt"]
+  exclude_paths: ["**/test/**", "**/androidTest/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "ContentResolver"
+    - ".query("
+    - "rawQuery("
+    - "Cursor"
+  regexes:
+    - "\\bCursor\\s+\\w+\\s*=\\s*.*\\.(query|rawQuery)\\s*\\("
+    - "\\bval\\s+\\w+\\s*=\\s*.*\\.(query|rawQuery)\\s*\\("
+
+trigger:
+  description: |
+    新增 ContentResolver.query、SQLiteDatabase.query/rawQuery 等返回 Cursor 的调用,
+    但 Cursor 没有放在 try-with-resources、try/finally 或 Kotlin use {} 中关闭。
+  signals:
+    - "Cursor 变量接收 query/rawQuery 返回值"
+    - "同一作用域内没有 try-with-resources、cursor.close() in finally、use { }"
+    - "return 或异常路径可能绕过 close()"
+
+risk: |
+  Cursor 持有 native 资源、数据库连接或 ContentProvider 跨进程句柄。
+  未关闭会导致 fd 泄漏、数据库连接耗尽或 provider 进程资源长期占用。
+
+suggestion: |
+  Java 使用 try (Cursor c = ...) { ... }。Kotlin 使用
+  resolver.query(...).use { cursor -> ... }。如果必须提前 return,
+  确保 close() 在 finally 中执行。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    Cursor c = resolver.query(uri, projection, null, null, null);
+    if (c.moveToFirst()) return c.getString(0);
+  fix_diff: |
+    - Cursor c = resolver.query(uri, projection, null, null, null);
+    - if (c.moveToFirst()) return c.getString(0);
+    + try (Cursor c = resolver.query(uri, projection, null, null, null)) {
+    +     if (c != null && c.moveToFirst()) return c.getString(0);
+    + }

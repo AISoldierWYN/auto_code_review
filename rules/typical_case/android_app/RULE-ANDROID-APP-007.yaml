@@ -1,0 +1,53 @@
+rule_id: RULE-ANDROID-APP-007
+title: APP 动态注册 BroadcastReceiver 后未按生命周期注销
+category: lifecycle
+severity: warning
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/develop/background-work/background-tasks/broadcasts
+    - https://developer.android.com/reference/android/app/Activity
+
+applies_to:
+  languages: [java, kotlin]
+  paths: ["**/*.java", "**/*.kt"]
+  exclude_paths: ["**/test/**", "**/androidTest/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "registerReceiver("
+    - "unregisterReceiver("
+    - "BroadcastReceiver"
+  regexes:
+    - "\\.registerReceiver\\s*\\("
+    - "new\\s+BroadcastReceiver\\s*\\("
+
+trigger:
+  description: |
+    Activity/Fragment/Service 中新增 registerReceiver 调用,但没有在对应生命周期
+    中 unregisterReceiver,或使用 Activity context 注册会跨过 Activity 生命周期。
+  signals:
+    - "onStart/onResume/onCreate 中 registerReceiver"
+    - "没有 onStop/onPause/onDestroy 中 unregisterReceiver"
+    - "receiver 可能持有 Activity/Fragment view 引用"
+
+risk: |
+  动态 receiver 未注销会泄漏 Activity/Fragment,并在页面不可见后继续收到广播。
+  重复进入页面还可能重复注册,造成多次回调和状态错乱。
+
+suggestion: |
+  按注册生命周期成对注销: onStart 注册则 onStop 注销,onResume 注册则 onPause 注销。
+  如果 receiver 需要比页面活得更久,使用 application context 并明确所有权。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    @Override protected void onStart() {
+        registerReceiver(receiver, filter);
+    }
+  fix_diff: |
+    + @Override protected void onStop() {
+    +     unregisterReceiver(receiver);
+    +     super.onStop();
+    + }

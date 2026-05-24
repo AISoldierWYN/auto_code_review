@@ -1,0 +1,55 @@
+rule_id: RULE-ANDROID-APP-011
+title: APP Kotlin Flow 在生命周期外持续收集
+category: lifecycle
+severity: warning
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/topic/libraries/architecture/coroutines
+    - https://developer.android.com/kotlin/flow/stateflow-and-sharedflow
+
+applies_to:
+  languages: [kotlin]
+  paths: ["**/*.kt"]
+  exclude_paths: ["**/test/**", "**/androidTest/**", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "lifecycleScope.launch"
+    - ".collect"
+    - "repeatOnLifecycle"
+    - "flowWithLifecycle"
+  regexes:
+    - "lifecycleScope\\.launch\\s*\\{[\\s\\S]*\\.collect\\s*\\{"
+    - "\\.collectLatest\\s*\\{"
+
+trigger:
+  description: |
+    Activity/Fragment 中新增 lifecycleScope.launch { flow.collect { ... } },
+    但没有 repeatOnLifecycle、flowWithLifecycle 或 viewLifecycleOwner 绑定。
+  signals:
+    - "lifecycleScope.launch 直接 collect/collectLatest"
+    - "Fragment 中使用 lifecycleScope 而不是 viewLifecycleOwner.lifecycleScope"
+    - "没有 repeatOnLifecycle(Lifecycle.State.STARTED)"
+
+risk: |
+  Flow 会在页面 STOPPED 后继续收集,更新不可见 UI、浪费资源,
+  Fragment view 销毁后还可能访问旧 binding 导致崩溃或泄漏。
+
+suggestion: |
+  在 UI 层使用 repeatOnLifecycle 包裹 collect。Fragment 优先使用
+  viewLifecycleOwner.lifecycleScope 和 viewLifecycleOwner.repeatOnLifecycle。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    lifecycleScope.launch {
+        viewModel.state.collect { render(it) }
+    }
+  fix_diff: |
+    + viewLifecycleOwner.lifecycleScope.launch {
+    +     viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+    +         viewModel.state.collect { render(it) }
+    +     }
+    + }

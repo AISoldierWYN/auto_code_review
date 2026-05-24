@@ -1,0 +1,10 @@
+name: case_android_app_cursor_leak_profile_lookup
+description: Android APP ContentResolver query returns through early paths without closing Cursor
+language_hint: java
+expected:
+  findings:
+    - rule_id: RULE-ANDROID-APP-002
+      file: app/src/main/java/com/acme/profile/ProfileRepository.java
+      line_range: [25, 43]
+  forbid_other_critical: false
+  summary_substring: display

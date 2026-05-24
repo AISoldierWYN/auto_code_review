@@ -1,0 +1,54 @@
+rule_id: RULE-ANDROID-APP-005
+title: APP WebView 暴露 JavaScript bridge 给不可信页面
+category: security
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/privacy-and-security/risks/insecure-webview-native-bridges
+    - https://developer.android.com/reference/android/webkit/WebView
+
+applies_to:
+  languages: [java, kotlin]
+  paths: ["**/*.java", "**/*.kt"]
+  exclude_paths: ["**/test/**", "**/androidTest/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "addJavascriptInterface"
+    - "setJavaScriptEnabled(true)"
+    - "loadUrl("
+    - "WebView"
+  regexes:
+    - "\\.addJavascriptInterface\\s*\\("
+    - "\\.setJavaScriptEnabled\\s*\\(\\s*true\\s*\\)"
+
+trigger:
+  description: |
+    WebView 开启 JavaScript 后新增 addJavascriptInterface,同时加载远程 URL、
+    HTTP URL、外部可控 URL 或未做 allowlist 校验的页面。
+  signals:
+    - "setJavaScriptEnabled(true) 与 addJavascriptInterface 同时出现"
+    - "loadUrl(url) 中 url 来自 Intent/server/config 或以 http:// 开头"
+    - "没有 HTTPS scheme 校验、host allowlist 或 removeJavascriptInterface"
+
+risk: |
+  JavaScript bridge 会把 Java/Kotlin 对象暴露给页面中的脚本。不可信内容可调用
+  @JavascriptInterface 方法,造成权限扩大、数据泄漏或任意业务操作。
+
+suggestion: |
+  只对可信 HTTPS origin 暴露 bridge,在加载前校验 scheme/host allowlist。
+  不需要 bridge 时禁用 JavaScript 或移除 interface。对 bridge 方法做最小能力设计。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    webView.getSettings().setJavaScriptEnabled(true);
+    webView.addJavascriptInterface(new Bridge(), "native");
+    webView.loadUrl(intent.getStringExtra("url"));
+  fix_diff: |
+    + Uri uri = Uri.parse(url);
+    + if (!"https".equals(uri.getScheme()) || !TRUSTED_HOSTS.contains(uri.getHost())) {
+    +     throw new SecurityException("untrusted WebView origin");
+    + }

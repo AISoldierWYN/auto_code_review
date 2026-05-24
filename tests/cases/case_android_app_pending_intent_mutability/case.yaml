@@ -1,0 +1,10 @@
+name: case_android_app_pending_intent_mutability
+description: Android APP notification action creates implicit mutable PendingIntent
+language_hint: java
+expected:
+  findings:
+    - rule_id: RULE-ANDROID-APP-004
+      file: app/src/main/java/com/acme/alerts/AlertActionFactory.java
+      line_range: [24, 38]
+  forbid_other_critical: false
+  summary_substring: PendingIntent

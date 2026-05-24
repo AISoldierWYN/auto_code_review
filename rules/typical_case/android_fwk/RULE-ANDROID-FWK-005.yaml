@@ -1,0 +1,58 @@
+rule_id: RULE-ANDROID-FWK-005
+title: FWK DeathRecipient 注册后缺少 unlinkToDeath 清理
+category: resource
+severity: warning
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/reference/android/os/IBinder#linkToDeath(android.os.IBinder.DeathRecipient,int)
+    - https://developer.android.com/reference/android/os/IBinder#unlinkToDeath(android.os.IBinder.DeathRecipient,int)
+
+applies_to:
+  languages: [java, kotlin]
+  paths:
+    - "frameworks/**/*.java"
+    - "frameworks/**/*.kt"
+    - "services/**/*.java"
+    - "services/**/*.kt"
+    - "**/*Service.java"
+    - "**/*Service.kt"
+  exclude_paths: ["**/test/**", "**/tests/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "linkToDeath"
+    - "unlinkToDeath"
+    - "DeathRecipient"
+  regexes:
+    - "\\.linkToDeath\\s*\\("
+    - "\\bDeathRecipient\\b"
+
+trigger:
+  description: |
+    Framework/SystemService 新增 IBinder.linkToDeath 监听 client/provider 死亡,
+    但正常注销、remove listener、stop service 或异常路径没有 unlinkToDeath。
+  signals:
+    - "binder.linkToDeath(deathRecipient, 0)"
+    - "注册对象从 map/list 移除时没有 unlinkToDeath"
+    - "binderDied 只清理异常路径,没有正常注销路径"
+
+risk: |
+  未 unlink 的 DeathRecipient 会让服务端保留对象和回调引用,造成泄漏。
+  客户端重新注册时还可能留下重复死亡监听和重复清理逻辑。
+
+suggestion: |
+  把 binder、DeathRecipient 和 client record 绑定为同一生命周期对象。
+  正常 unregister/remove 时先 unlinkToDeath,再从集合移除;死亡路径中容忍 unlink 返回 false。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    client.asBinder().linkToDeath(record, 0);
+    mClients.put(id, record);
+  fix_diff: |
+    + ClientRecord old = mClients.remove(id);
+    + if (old != null) old.binder.unlinkToDeath(old, 0);
+    + client.asBinder().linkToDeath(record, 0);
+    + mClients.put(id, record);

@@ -1,0 +1,47 @@
+diff --git a/app/src/main/java/com/acme/alerts/AlertActionFactory.java b/app/src/main/java/com/acme/alerts/AlertActionFactory.java
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/app/src/main/java/com/acme/alerts/AlertActionFactory.java
+@@ -0,0 +1,41 @@
++package com.acme.alerts;
++
++import android.app.Notification;
++import android.app.PendingIntent;
++import android.content.Context;
++import android.content.Intent;
++import androidx.core.app.NotificationCompat;
++
++public final class AlertActionFactory {
++    private static final String ACTION_RETRY_SYNC = "com.acme.alerts.RETRY_SYNC";
++    private static final String EXTRA_ALERT_ID = "alert_id";
++
++    private final Context context;
++
++    public AlertActionFactory(Context context) {
++        this.context = context;
++    }
++
++    public NotificationCompat.Action buildRetryAction(Alert alert) {
++        Intent retry = new Intent(ACTION_RETRY_SYNC);
++        retry.putExtra(EXTRA_ALERT_ID, alert.id());
++        retry.putExtra("source", "notification");
++        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
++        PendingIntent operation = PendingIntent.getBroadcast(
++                context,
++                alert.requestCode(),
++                retry,
++                flags);
++        return new NotificationCompat.Action.Builder(
++                R.drawable.ic_retry,
++                context.getString(R.string.retry),
++                operation)
++                .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
++                .build();
++    }
++
++    public interface Alert {
++        String id();
++        int requestCode();
++    }
++}

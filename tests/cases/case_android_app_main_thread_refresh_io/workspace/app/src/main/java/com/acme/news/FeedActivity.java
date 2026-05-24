@@ -1,0 +1,51 @@
+package com.acme.news;
+
+import android.os.Bundle;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import androidx.appcompat.app.AppCompatActivity;
+import android.widget.TextView;
+
+public final class FeedActivity extends AppCompatActivity {
+    private TextView headline;
+    private String endpoint;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_feed);
+        headline = findViewById(R.id.headline);
+        endpoint = getIntent().getStringExtra("feed_endpoint");
+        if (endpoint == null) {
+            endpoint = "https://news.example.com";
+        }
+        refreshFeaturedStory("home");
+    }
+
+    private void refreshFeaturedStory(String channel) {
+        String requestUrl = endpoint + "/v2/featured?channel=" + encode(channel);
+        try {
+            HttpURLConnection conn = (HttpURLConnection) new URL(requestUrl).openConnection();
+            conn.setConnectTimeout(2500);
+            conn.setReadTimeout(2500);
+            conn.connect();
+            int code = conn.getResponseCode();
+            if (code != 200) {
+                headline.setText("No featured story");
+                return;
+            }
+            BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            String title = reader.readLine();
+            headline.setText(title == null ? "No story" : title);
+        } catch (IOException e) {
+            headline.setText("Offline");
+        }
+    }
+
+    private String encode(String value) {
+        return value.replace(" ", "%20");
+    }
+}

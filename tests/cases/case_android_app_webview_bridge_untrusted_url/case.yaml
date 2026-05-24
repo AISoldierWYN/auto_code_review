@@ -1,0 +1,10 @@
+name: case_android_app_webview_bridge_untrusted_url
+description: Android APP WebView bridge is enabled before loading an Intent-controlled URL
+language_hint: java
+expected:
+  findings:
+    - rule_id: RULE-ANDROID-APP-005
+      file: app/src/main/java/com/acme/promo/PromoWebActivity.java
+      line_range: [28, 46]
+  forbid_other_critical: false
+  summary_substring: WebView

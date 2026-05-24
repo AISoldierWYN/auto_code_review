@@ -1,0 +1,63 @@
+rule_id: RULE-ANDROID-FWK-003
+title: FWK Binder 入口在锁内调用外部进程或回调
+category: concurrency
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/topic/performance/vitals/anr
+    - https://developer.android.com/reference/android/os/IBinder
+
+applies_to:
+  languages: [java, kotlin]
+  paths:
+    - "frameworks/**/*.java"
+    - "frameworks/**/*.kt"
+    - "services/**/*.java"
+    - "services/**/*.kt"
+    - "**/*Service.java"
+    - "**/*Service.kt"
+  exclude_paths: ["**/test/**", "**/tests/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "synchronized"
+    - "RemoteException"
+    - ".transact("
+    - ".on"
+  regexes:
+    - "synchronized\\s*\\([^)]*\\)\\s*\\{[\\s\\S]*\\.(transact|on[A-Z]\\w*)\\s*\\("
+    - "synchronized\\s+.*\\{[\\s\\S]*RemoteException"
+
+trigger:
+  description: |
+    Framework 服务在 synchronized(mLock) 或持有全局锁期间调用 Binder 远端、
+    listener callback、ContentResolver、PackageManager 等可能跨进程/重入的外部代码。
+  signals:
+    - "synchronized(mLock) 内调用 remote listener.onXxx 或 binder.transact"
+    - "锁内调用可能回到本服务的外部接口"
+    - "没有先复制快照、释放锁再通知"
+
+risk: |
+  锁内跨进程调用可能导致死锁、锁顺序反转、system_server 卡死或 ANR。
+  对方进程慢、死亡或重入时会放大影响范围。
+
+suggestion: |
+  在锁内只读取/更新本地状态并复制需要通知的数据。释放锁后再调用远端接口。
+  对 RemoteCallbackList 使用 beginBroadcast/finishBroadcast 时也避免持有服务全局锁。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    synchronized (mLock) {
+        mState = state;
+        callback.onStateChanged(state);
+    }
+  fix_diff: |
+    + IListener callback;
+    + synchronized (mLock) {
+    +     mState = state;
+    +     callback = mCallback;
+    + }
+    + callback.onStateChanged(state);

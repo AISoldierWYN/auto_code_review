@@ -1,0 +1,60 @@
+rule_id: RULE-ANDROID-FWK-006
+title: FWK 跨用户访问缺少 userId 归一化和权限校验
+category: security
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/reference/android/os/UserHandle
+    - https://developer.android.com/reference/android/os/Binder#getCallingUid()
+
+applies_to:
+  languages: [java, kotlin]
+  paths:
+    - "frameworks/**/*.java"
+    - "frameworks/**/*.kt"
+    - "services/**/*.java"
+    - "services/**/*.kt"
+    - "**/*Service.java"
+    - "**/*Service.kt"
+  exclude_paths: ["**/test/**", "**/tests/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "userId"
+    - "UserHandle"
+    - "getCallingUserId"
+    - "INTERACT_ACROSS_USERS"
+  regexes:
+    - "\\buserId\\b"
+    - "UserHandle\\.getUserId\\s*\\("
+
+trigger:
+  description: |
+    SystemService/Binder 接口新增 userId/userHandle 参数并据此读取或修改用户数据,
+    但没有把 USER_CURRENT/USER_ALL 等特殊值归一化,也没有校验跨用户权限。
+  signals:
+    - "public Binder 方法接受 int userId/UserHandle"
+    - "使用传入 userId 访问 settings/package/account/profile 数据"
+    - "没有 handleIncomingUser、INTERACT_ACROSS_USERS 或 calling user 校验"
+
+risk: |
+  Android 多用户/工作资料隔离依赖 userId 校验。直接信任调用方传入的 userId
+  会造成跨用户数据读取、设置修改或 profile 越权。
+
+suggestion: |
+  在入口统一解析 userId: 处理 USER_CURRENT/USER_ALL,比较 Binder.getCallingUid()
+  所属用户,需要跨用户时强制 INTERACT_ACROSS_USERS 或更具体权限。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    public Bundle getProfile(int userId) {
+        return mStore.readProfile(userId);
+    }
+  fix_diff: |
+    + public Bundle getProfile(int userId) {
+    +     userId = handleIncomingUser(Binder.getCallingUid(), userId, "getProfile");
+    +     return mStore.readProfile(userId);
+    + }

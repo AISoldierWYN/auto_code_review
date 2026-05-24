@@ -1,0 +1,63 @@
+rule_id: RULE-ANDROID-FWK-001
+title: FWK Binder.clearCallingIdentity 未用 finally 恢复身份
+category: security
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/reference/android/os/Binder#clearCallingIdentity()
+    - https://developer.android.com/reference/android/os/Binder#restoreCallingIdentity(long)
+
+applies_to:
+  languages: [java, kotlin]
+  paths:
+    - "frameworks/**/*.java"
+    - "frameworks/**/*.kt"
+    - "services/**/*.java"
+    - "services/**/*.kt"
+    - "**/*Service.java"
+    - "**/*Service.kt"
+  exclude_paths: ["**/test/**", "**/tests/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "clearCallingIdentity"
+    - "restoreCallingIdentity"
+    - "Binder."
+  regexes:
+    - "Binder\\.clearCallingIdentity\\s*\\("
+    - "clearCallingIdentity\\s*\\("
+
+trigger:
+  description: |
+    Framework/SystemService Binder 入口新增 clearCallingIdentity,但
+    restoreCallingIdentity 没有放在 finally 中,或 token 可能被覆盖/丢失。
+  signals:
+    - "long token = Binder.clearCallingIdentity()"
+    - "后续有 return/throw/调用外部代码,restoreCallingIdentity 不在 finally"
+    - "多个 clearCallingIdentity 嵌套但 token 复用"
+
+risk: |
+  调用身份未恢复会让后续代码继续以 system_server/本进程身份执行,
+  造成权限绕过、审计错误或跨调用身份污染。
+
+suggestion: |
+  使用固定模板: long token = Binder.clearCallingIdentity(); try { ... }
+  finally { Binder.restoreCallingIdentity(token); }。避免复用 token 变量。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    long token = Binder.clearCallingIdentity();
+    if (!enabled) return;
+    doPrivilegedWork();
+    Binder.restoreCallingIdentity(token);
+  fix_diff: |
+    + long token = Binder.clearCallingIdentity();
+    + try {
+    +     if (!enabled) return;
+    +     doPrivilegedWork();
+    + } finally {
+    +     Binder.restoreCallingIdentity(token);
+    + }

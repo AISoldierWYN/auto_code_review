@@ -1,0 +1,64 @@
+rule_id: RULE-ANDROID-FWK-004
+title: FWK RemoteCallbackList 广播后缺少 finishBroadcast
+category: resource
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/reference/android/os/RemoteCallbackList
+    - https://developer.android.com/reference/android/os/RemoteException
+
+applies_to:
+  languages: [java, kotlin]
+  paths:
+    - "frameworks/**/*.java"
+    - "frameworks/**/*.kt"
+    - "services/**/*.java"
+    - "services/**/*.kt"
+    - "**/*Service.java"
+    - "**/*Service.kt"
+  exclude_paths: ["**/test/**", "**/tests/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "RemoteCallbackList"
+    - "beginBroadcast"
+    - "finishBroadcast"
+  regexes:
+    - "\\.beginBroadcast\\s*\\("
+    - "\\.finishBroadcast\\s*\\("
+
+trigger:
+  description: |
+    新增 RemoteCallbackList.beginBroadcast 后,finishBroadcast 没有在 finally 中调用,
+    或循环中 return/throw 可能跳过 finishBroadcast。
+  signals:
+    - "int n = callbacks.beginBroadcast()"
+    - "finishBroadcast 不在 finally"
+    - "循环中有 return/break/throw 或调用远端 callback"
+
+risk: |
+  beginBroadcast/finishBroadcast 必须配对。缺失 finishBroadcast 会让广播状态未清理,
+  后续 callback 管理异常,在 system service 中会长期污染进程状态。
+
+suggestion: |
+  使用 try/finally 包裹 beginBroadcast 到所有 callback 调用。
+  远端调用捕获 RemoteException,不要让异常绕过 finishBroadcast。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    int n = mCallbacks.beginBroadcast();
+    for (int i = 0; i < n; i++) {
+        mCallbacks.getBroadcastItem(i).onChanged();
+    }
+  fix_diff: |
+    + int n = mCallbacks.beginBroadcast();
+    + try {
+    +     for (int i = 0; i < n; i++) {
+    +         mCallbacks.getBroadcastItem(i).onChanged();
+    +     }
+    + } finally {
+    +     mCallbacks.finishBroadcast();
+    + }

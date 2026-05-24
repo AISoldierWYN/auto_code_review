@@ -1,0 +1,10 @@
+name: case_android_app_main_thread_refresh_io
+description: Android APP main-thread refresh path performs synchronous HTTP I/O
+language_hint: java
+expected:
+  findings:
+    - rule_id: RULE-ANDROID-APP-001
+      file: app/src/main/java/com/acme/news/FeedActivity.java
+      line_range: [26, 40]
+  forbid_other_critical: false
+  summary_substring: refreshFeaturedStory

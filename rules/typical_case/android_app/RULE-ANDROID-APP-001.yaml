@@ -1,0 +1,60 @@
+rule_id: RULE-ANDROID-APP-001
+title: APP 主线程中执行阻塞 I/O 或网络请求
+category: performance
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/topic/performance/vitals/anr
+    - https://developer.android.com/guide/practices/responsiveness
+
+applies_to:
+  languages: [java, kotlin]
+  paths: ["**/*.java", "**/*.kt"]
+  exclude_paths: ["**/test/**", "**/androidTest/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "onCreate("
+    - "onClick("
+    - "onReceive("
+    - ".execute()"
+    - "HttpURLConnection"
+    - "FileInputStream"
+    - "rawQuery("
+  regexes:
+    - "\\b(onCreate|onClick|onReceive|onStart|onResume)\\s*\\("
+    - "\\b(Thread\\.sleep|URLConnection|HttpURLConnection|rawQuery|FileInputStream)\\b"
+
+trigger:
+  description: |
+    Activity/Fragment/BroadcastReceiver 等主线程回调中新增网络、磁盘、数据库或
+    Thread.sleep 等阻塞调用,且没有切换到后台线程、协程 IO dispatcher 或
+    WorkManager/JobScheduler。
+  signals:
+    - "onCreate/onResume/onClick/onReceive 内直接调用 HttpURLConnection/OkHttp execute/rawQuery/FileInputStream"
+    - "主线程回调内出现 Thread.sleep、Future.get、CountDownLatch.await 等等待"
+    - "没有 Executor、Dispatchers.IO、withContext、WorkManager 等后台调度边界"
+
+risk: |
+  Android 主线程负责输入、绘制和生命周期分发。阻塞操作会造成卡顿,
+  严重时触发 ANR, BroadcastReceiver 中还可能拖慢系统广播分发。
+
+suggestion: |
+  将阻塞操作移到后台执行: Java 使用 Executor/Coroutine bridge/WorkManager,
+  Kotlin 使用 withContext(Dispatchers.IO) 或 lifecycle-aware coroutine。
+  UI 回调只负责触发任务和渲染结果。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    @Override public void onClick(View v) {
+        String body = httpClient.newCall(request).execute().body().string();
+        title.setText(body);
+    }
+  fix_diff: |
+    + executor.execute(() -> {
+    +     String body = httpClient.newCall(request).execute().body().string();
+    +     mainHandler.post(() -> title.setText(body));
+    + });

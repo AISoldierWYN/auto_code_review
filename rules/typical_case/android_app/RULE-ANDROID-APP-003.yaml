@@ -1,0 +1,54 @@
+rule_id: RULE-ANDROID-APP-003
+title: APP WakeLock acquire 后缺少超时或 finally 释放
+category: resource
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/reference/android/os/PowerManager.WakeLock
+    - https://developer.android.com/develop/background-work/background-tasks/awake/wakelock/set
+
+applies_to:
+  languages: [java, kotlin]
+  paths: ["**/*.java", "**/*.kt"]
+  exclude_paths: ["**/test/**", "**/androidTest/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "newWakeLock"
+    - ".acquire()"
+    - "WakeLock"
+  regexes:
+    - "\\bWakeLock\\b"
+    - "\\.acquire\\s*\\(\\s*\\)"
+
+trigger:
+  description: |
+    新增 WakeLock.acquire() 无超时调用,且没有在 try/finally、生命周期回调或
+    timeout acquire(long) 中保证释放。
+  signals:
+    - "PowerManager.WakeLock.acquire() 不带 timeout"
+    - "同一方法或生命周期配对路径中没有 release()"
+    - "release() 不在 finally 中,异常路径可能跳过"
+
+risk: |
+  WakeLock 未释放会阻止设备休眠,造成严重耗电、发热和后台运行异常。
+  引用计数模式下 acquire/release 次数不匹配还会让问题更隐蔽。
+
+suggestion: |
+  优先使用 acquire(timeoutMs)。需要跨方法持有时,明确生命周期所有权,
+  并在 finally/onStop/onDestroy 中释放。短任务建议改用 WorkManager/foreground service。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    wakeLock.acquire();
+    doUpload();
+  fix_diff: |
+    + wakeLock.acquire(30_000L);
+    + try {
+    +     doUpload();
+    + } finally {
+    +     if (wakeLock.isHeld()) wakeLock.release();
+    + }

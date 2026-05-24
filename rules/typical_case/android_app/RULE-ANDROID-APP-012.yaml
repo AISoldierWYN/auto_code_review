@@ -1,0 +1,53 @@
+rule_id: RULE-ANDROID-APP-012
+title: APP Android 组件中使用 GlobalScope 或无生命周期 CoroutineScope
+category: concurrency
+severity: warning
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/topic/libraries/architecture/coroutines
+    - https://kotlinlang.org/docs/coroutines-basics.html#structured-concurrency
+
+applies_to:
+  languages: [kotlin]
+  paths: ["**/*.kt"]
+  exclude_paths: ["**/test/**", "**/androidTest/**", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "GlobalScope.launch"
+    - "CoroutineScope("
+    - "Dispatchers.IO"
+    - "viewModelScope"
+  regexes:
+    - "\\bGlobalScope\\.(launch|async)\\s*\\("
+    - "\\bCoroutineScope\\s*\\(\\s*Dispatchers\\."
+
+trigger:
+  description: |
+    Activity/Fragment/ViewModel/Service 中新增 GlobalScope 或临时 CoroutineScope(...)
+    启动任务,没有绑定 lifecycleScope、viewModelScope 或可取消的 owner scope。
+  signals:
+    - "GlobalScope.launch/async 出现在 Android 组件代码"
+    - "CoroutineScope(Dispatchers.IO).launch 直接创建后不保存 Job"
+    - "没有在 onCleared/onDestroy/onStop 中 cancel"
+
+risk: |
+  脱离结构化并发的任务会在页面销毁后继续运行,导致 UI 回调越界、
+  内存泄漏、重复请求和异常无法被父 scope 统一处理。
+
+suggestion: |
+  ViewModel 使用 viewModelScope,Activity/Fragment 使用 lifecycleScope 或
+  repeatOnLifecycle,长任务使用 WorkManager/Service 并保存可取消 Job。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    GlobalScope.launch(Dispatchers.IO) {
+        repository.refresh()
+    }
+  fix_diff: |
+    + viewModelScope.launch {
+    +     withContext(Dispatchers.IO) { repository.refresh() }
+    + }

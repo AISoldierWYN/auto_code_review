@@ -1,0 +1,50 @@
+rule_id: RULE-ANDROID-APP-004
+title: APP PendingIntent 缺少不可变标记或使用隐式 mutable Intent
+category: security
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/privacy-and-security/risks/pending-intent
+    - https://developer.android.com/reference/android/app/PendingIntent
+
+applies_to:
+  languages: [java, kotlin]
+  paths: ["**/*.java", "**/*.kt"]
+  exclude_paths: ["**/test/**", "**/androidTest/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "PendingIntent.get"
+    - "FLAG_MUTABLE"
+    - "FLAG_IMMUTABLE"
+  regexes:
+    - "PendingIntent\\.get(Activity|Broadcast|Service)\\s*\\("
+    - "FLAG_MUTABLE"
+
+trigger:
+  description: |
+    新增 PendingIntent.getActivity/getBroadcast/getService 调用,但 flags 中缺少
+    FLAG_IMMUTABLE,或使用 FLAG_MUTABLE 搭配隐式 Intent 且没有必要的可变场景。
+  signals:
+    - "PendingIntent flags 为 0、FLAG_UPDATE_CURRENT 单独使用或没有 FLAG_IMMUTABLE/FLAG_MUTABLE"
+    - "FLAG_MUTABLE 与 new Intent(action) 这种隐式 Intent 一起出现"
+    - "不是 inline reply、bubbles 等必须 mutable 的场景"
+
+risk: |
+  Mutable PendingIntent 允许接收方填充或修改未固定字段,可能触达应用内部组件。
+  Android 12+ 还要求显式声明 mutability,否则可能直接崩溃。
+
+suggestion: |
+  默认使用 FLAG_IMMUTABLE。只有 inline reply/bubbles 等必须修改底层 intent 的场景
+  才使用 FLAG_MUTABLE,并把 Intent 显式化(setPackage/setClass/component)。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    PendingIntent pi = PendingIntent.getActivity(ctx, 0, new Intent(ACTION), 0);
+  fix_diff: |
+    + Intent intent = new Intent(ctx, DetailActivity.class).setAction(ACTION);
+    + PendingIntent pi = PendingIntent.getActivity(
+    +     ctx, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);

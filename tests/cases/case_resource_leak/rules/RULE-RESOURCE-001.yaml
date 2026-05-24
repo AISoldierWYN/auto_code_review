@@ -1,0 +1,54 @@
+rule_id: RULE-RESOURCE-001
+title: 文件打开后未通过 with 语句管理 — 句柄泄漏
+category: resource
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://docs.python.org/3/library/functions.html#open
+    - PEP-343
+
+applies_to:
+  languages: [python]
+  paths: ["**/*.py"]
+  exclude_paths: ["tests/**", "**/test_*.py", "**/*_test.py"]
+
+recall:
+  keywords:
+    - "open("
+  regexes:
+    - "\\bopen\\s*\\("
+
+trigger:
+  description: |
+    使用 open() 打开文件后,返回的文件对象既没有被 with 语句包裹,
+    也没有显式 close() / try-finally 保护。函数 return 或抛异常时,
+    文件描述符会泄漏。
+  signals:
+    - "open(...) 的返回值被赋给一个局部变量,但作用域内没有 with 块包裹该 open() 调用"
+    - "open(...) 之后,同一作用域内既没有 .close() 调用,也没有 try ... finally 结构"
+    - "open(...) 调用所在函数 return 之前,文件对象的生命周期没有显式终止"
+
+risk: |
+  - 文件描述符泄漏。长跑进程会触发 OSError: Too many open files
+  - Windows 上文件被进程持有,后续 rename/unlink 失败
+  - 进程崩溃或异常退出时,stdio 缓冲区未刷新,写入丢失
+
+suggestion: |
+  改用 with 语句:
+      with open(path, "r", encoding="utf-8") as f:
+          ...
+  或者在 try/finally 中显式 close。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    def load(path):
+        f = open(path)
+        return f.read()
+  fix_diff: |
+    -    f = open(path)
+    -    return f.read()
+    +    with open(path) as f:
+    +        return f.read()

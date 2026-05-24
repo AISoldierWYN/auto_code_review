@@ -1,0 +1,61 @@
+rule_id: RULE-ANDROID-FWK-002
+title: FWK Binder 服务入口执行敏感操作前未校验调用方权限
+category: security
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/reference/android/os/Binder#getCallingUid()
+    - https://developer.android.com/reference/android/content/Context#enforceCallingOrSelfPermission(java.lang.String,java.lang.String)
+
+applies_to:
+  languages: [java, kotlin]
+  paths:
+    - "frameworks/**/*.java"
+    - "frameworks/**/*.kt"
+    - "services/**/*.java"
+    - "services/**/*.kt"
+    - "**/*Service.java"
+    - "**/*Service.kt"
+  exclude_paths: ["**/test/**", "**/tests/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "getCallingUid"
+    - "enforceCalling"
+    - "checkCalling"
+    - "AppOpsManager"
+  regexes:
+    - "\\bpublic\\s+.*\\s+\\w+\\s*\\([^)]*\\)\\s*\\{"
+    - "\\b(getCallingUid|enforceCalling|checkCalling|noteOp|checkOp)\\b"
+
+trigger:
+  description: |
+    新增 Binder/SystemService 对外方法执行敏感状态修改、跨用户访问、文件访问、
+    设置写入或隐私数据读取,但方法入口没有 enforce/check permission、AppOps
+    或 getCallingUid/getCallingUserHandle 校验。
+  signals:
+    - "public Binder 接口方法中先修改系统状态/写 Settings/访问用户数据"
+    - "方法入口缺少 enforceCallingOrSelfPermission/checkCallingPermission"
+    - "涉及 userId 但没有 handleIncomingUser/cross-user 校验"
+
+risk: |
+  Framework 服务默认暴露给其他进程调用。缺少调用方校验会造成权限绕过,
+  普通应用可能调用系统能力、跨用户读取数据或修改系统状态。
+
+suggestion: |
+  在方法入口先校验 manifest permission、AppOps、calling uid/userId 和调用包名归属。
+  敏感操作必须发生在校验之后,并在 clearCallingIdentity 前完成调用方身份判断。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    public void setFeatureEnabled(boolean enabled) {
+        mSettings.putBoolean("feature", enabled);
+    }
+  fix_diff: |
+    + public void setFeatureEnabled(boolean enabled) {
+    +     mContext.enforceCallingOrSelfPermission(MANAGE_FEATURE, "setFeatureEnabled");
+    +     mSettings.putBoolean("feature", enabled);
+    + }

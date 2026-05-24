@@ -1,0 +1,10 @@
+name: case_android_fwk_binder_identity_restore
+description: Android FWK service clears Binder identity with early returns before restore
+language_hint: java
+expected:
+  findings:
+    - rule_id: RULE-ANDROID-FWK-001
+      file: frameworks/base/services/core/java/com/android/server/acme/QuotaManagerService.java
+      line_range: [28, 48]
+  forbid_other_critical: false
+  summary_substring: identity

@@ -1,0 +1,51 @@
+rule_id: RULE-ANDROID-APP-006
+title: APP SQLite 查询拼接外部输入
+category: security
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/privacy-and-security/risks/sql-injection
+    - https://developer.android.com/training/data-storage/sqlite
+
+applies_to:
+  languages: [java, kotlin]
+  paths: ["**/*.java", "**/*.kt"]
+  exclude_paths: ["**/test/**", "**/androidTest/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "rawQuery("
+    - "execSQL("
+    - "selectionArgs"
+    - "WHERE "
+  regexes:
+    - "\\b(rawQuery|execSQL)\\s*\\(.*\\+"
+    - "\"\\s*SELECT\\s+.*\"\\s*\\+"
+
+trigger:
+  description: |
+    新增 rawQuery/execSQL/query selection 字符串拼接外部输入,而不是使用 ? 占位符
+    和 selectionArgs/bindArgs。
+  signals:
+    - "SQL 字符串包含 + userInput / intent extra / EditText 文本"
+    - "WHERE 子句直接拼接变量"
+    - "selectionArgs 为 null 或缺失"
+
+risk: |
+  SQL 拼接会引入 SQL injection。即使数据库只在本地,攻击者也可能通过深链、
+  Intent extra、剪贴板或同步数据污染查询条件,读取或破坏本地数据。
+
+suggestion: |
+  使用 selection + selectionArgs 或 rawQuery(sql, args)。表名/列名这类不能绑定的
+  结构化片段必须从白名单枚举中选择,不要直接使用外部字符串。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    Cursor c = db.rawQuery("SELECT * FROM users WHERE name = '" + name + "'", null);
+  fix_diff: |
+    + Cursor c = db.rawQuery(
+    +     "SELECT * FROM users WHERE name = ?",
+    +     new String[] { name });

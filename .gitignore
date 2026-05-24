@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+reviews/
+
+# JavaScript tooling
+node_modules/
+npm-debug.log*
+
+# Secrets — never commit
+.env
+.env.local
+*.key
+
+# Local run artifacts
+.bat_*.log
+agent_raw.txt
+
+# IDE
+.idea/
+.vscode/
+*.swp

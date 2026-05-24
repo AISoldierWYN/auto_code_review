@@ -1,0 +1,47 @@
+package com.acme.promo;
+
+import android.annotation.SuppressLint;
+import android.os.Bundle;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import androidx.appcompat.app.AppCompatActivity;
+
+public final class PromoWebActivity extends AppCompatActivity {
+    private WebView webView;
+    private PromoBridge bridge;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_promo_web);
+        webView = findViewById(R.id.web);
+        bridge = new PromoBridge();
+        configureWebView();
+        String landingUrl = getIntent().getStringExtra("landing_url");
+        if (landingUrl == null || landingUrl.length() == 0) {
+            landingUrl = "https://promo.example.com/home";
+        }
+        webView.loadUrl(landingUrl);
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void configureWebView() {
+        WebSettings settings = webView.getSettings();
+        settings.setDomStorageEnabled(true);
+        settings.setJavaScriptEnabled(true);
+        webView.addJavascriptInterface(bridge, "AcmePromo");
+    }
+
+    public final class PromoBridge {
+        @JavascriptInterface
+        public void redeem(String campaignId) {
+            PromoReporter.reportRedeem(campaignId);
+        }
+    }
+
+    private static final class PromoReporter {
+        static void reportRedeem(String id) {
+        }
+    }
+}

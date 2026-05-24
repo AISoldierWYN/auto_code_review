@@ -1,0 +1,49 @@
+rule_id: RULE-ANDROID-APP-009
+title: APP 生产代码中使用明文 HTTP 通信
+category: security
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/privacy-and-security/risks/cleartext-communications
+    - https://developer.android.com/privacy-and-security/security-config
+
+applies_to:
+  languages: [java, kotlin]
+  paths: ["**/*.java", "**/*.kt"]
+  exclude_paths: ["**/test/**", "**/androidTest/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "http://"
+    - "usesCleartextTraffic"
+    - "NetworkSecurityConfig"
+  regexes:
+    - "\"http://"
+    - "Uri\\.parse\\s*\\(\\s*\"http://"
+
+trigger:
+  description: |
+    新增生产路径使用 http:// URL、明文 endpoint 或允许 cleartext 的网络配置,
+    且不是 localhost/debug/test-only 场景。
+  signals:
+    - "Java/Kotlin 代码中硬编码 http:// 远程域名"
+    - "URL 来自配置但默认值是 http://"
+    - "没有 BuildConfig.DEBUG、localhost、测试目录或明确迁移说明"
+
+risk: |
+  明文 HTTP 容易被中间人窃听和篡改,可造成账号、token、业务数据泄漏,
+  也可能被注入恶意响应触发后续逻辑漏洞。
+
+suggestion: |
+  改为 HTTPS 并校验证书链。仅 debug/localhost 需要明文时,用 network security
+  config 针对 debug variant 或特定域名最小化放开。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    private static final String API = "http://api.example.com/v1/profile";
+  fix_diff: |
+    - private static final String API = "http://api.example.com/v1/profile";
+    + private static final String API = "https://api.example.com/v1/profile";

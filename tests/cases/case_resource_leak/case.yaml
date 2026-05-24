@@ -1,0 +1,10 @@
+name: case_resource_leak
+description: open() without with — fd leak (demo)
+language_hint: python
+expected:
+  findings:
+    - rule_id: RULE-RESOURCE-001
+      file: examples/stage_1_demo/cache_loader.py
+      line_range: [9, 12]              # the `f = open(...)` line
+  forbid_other_critical: false
+  summary_substring: load_cache

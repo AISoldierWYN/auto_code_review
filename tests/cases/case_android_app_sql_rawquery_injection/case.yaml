@@ -1,0 +1,10 @@
+name: case_android_app_sql_rawquery_injection
+description: Android APP search DAO builds a rawQuery with user controlled text
+language_hint: java
+expected:
+  findings:
+    - rule_id: RULE-ANDROID-APP-006
+      file: app/src/main/java/com/acme/search/SearchStore.java
+      line_range: [28, 43]
+  forbid_other_critical: false
+  summary_substring: rawQuery

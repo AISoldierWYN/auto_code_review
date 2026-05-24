@@ -1,0 +1,56 @@
+rule_id: RULE-ANDROID-APP-008
+title: APP startForegroundService 后未及时调用 startForeground
+category: compatibility
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/about/versions/oreo/background
+    - https://developer.android.com/develop/background-work/services/foreground-services
+
+applies_to:
+  languages: [java, kotlin]
+  paths: ["**/*.java", "**/*.kt"]
+  exclude_paths: ["**/test/**", "**/androidTest/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "startForegroundService("
+    - "startForeground("
+    - "ForegroundService"
+  regexes:
+    - "\\bstartForegroundService\\s*\\("
+    - "\\bstartForeground\\s*\\("
+
+trigger:
+  description: |
+    新增 startForegroundService 启动服务,但目标 Service 的 onCreate/onStartCommand
+    没有立即调用 startForeground 展示通知,或在耗时初始化之后才调用。
+  signals:
+    - "ContextCompat.startForegroundService/startForegroundService 新增"
+    - "Service.onStartCommand 中先做网络/IO/初始化,后调用 startForeground"
+    - "目标 Service 没有 startForeground 调用"
+
+risk: |
+  Android 8.0+ 要求前台服务启动后短时间内调用 startForeground。
+  超时会被系统停止并触发 ANR/RemoteServiceException,线上表现为启动服务偶发崩溃。
+
+suggestion: |
+  在 Service 入口尽早构造最小通知并调用 startForeground,再启动耗时工作。
+  不需要用户可见持续任务时,优先使用 WorkManager/JobScheduler。
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        syncLargePayload();
+        startForeground(ID, notification);
+        return START_STICKY;
+    }
+  fix_diff: |
+    + public int onStartCommand(Intent intent, int flags, int startId) {
+    +     startForeground(ID, buildNotification());
+    +     executor.execute(this::syncLargePayload);
+    +     return START_STICKY;
+    + }
