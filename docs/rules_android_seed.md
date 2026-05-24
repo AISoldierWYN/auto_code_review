@@ -20,3 +20,6 @@
 3. 对真实命中过线上问题的规则,复制到 `rules/bug_history/` 并补内部来源。
 4. 每补一条真实案例,在 `tests/cases/` 加对应 regression case。
 
+## New Coverage
+
+- `RULE-ANDROID-APP-013`: APP zip/theme pack extraction Zip Slip path traversal.

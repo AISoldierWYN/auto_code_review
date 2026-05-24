@@ -64,7 +64,7 @@ Stage 2 已有 L1/L2/L3/L4:
 
 ```text
 pytest tests/stage_2
-32 passed
+39 passed
 ```
 
 ## 5. 自审记录
@@ -89,6 +89,7 @@ pytest tests/stage_2
 - `tests/cases/case_android_app_pending_intent_mutability/`
 - `tests/cases/case_android_app_webview_bridge_untrusted_url/`
 - `tests/cases/case_android_app_sql_rawquery_injection/`
+- `tests/cases/case_android_app_zip_slip_theme_unpack/`
 - `tests/cases/case_android_fwk_binder_identity_restore/`
 
 ## 8. Case 覆盖报告

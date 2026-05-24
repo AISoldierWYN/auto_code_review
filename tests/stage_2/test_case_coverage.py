@@ -23,12 +23,15 @@ def test_current_cases_cover_seed_rules_and_recall_expected_rules() -> None:
 
     report = build_case_coverage_report(rules, cases)
 
-    assert report.total_cases >= 7
-    assert report.total_rules >= 19
-    assert report.total_expected_findings >= 7
+    assert report.total_cases >= 8
+    assert report.total_rules >= 20
+    assert report.total_expected_findings >= 8
     assert "RULE-ANDROID-APP-001" in report.covered_rule_ids
     assert report.cases_by_rule["RULE-ANDROID-APP-001"] == (
         "case_android_app_main_thread_refresh_io",
+    )
+    assert report.cases_by_rule["RULE-ANDROID-APP-013"] == (
+        "case_android_app_zip_slip_theme_unpack",
     )
     assert "RULE-ANDROID-APP-003" in report.uncovered_rule_ids
     assert report.unknown_expected_rule_ids == ()

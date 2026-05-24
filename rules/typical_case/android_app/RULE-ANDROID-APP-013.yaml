@@ -1,0 +1,60 @@
+rule_id: RULE-ANDROID-APP-013
+title: APP extracts ZipEntry names without canonical child-path validation
+category: security
+severity: critical
+
+source:
+  type: typical_case
+  refs:
+    - https://developer.android.com/privacy-and-security/risks/zip-path-traversal
+
+applies_to:
+  languages: [java, kotlin]
+  paths: ["**/*.java", "**/*.kt"]
+  exclude_paths: ["**/test/**", "**/androidTest/**", "**/*Test.java", "**/*Test.kt"]
+
+recall:
+  keywords:
+    - "ZipInputStream"
+    - "ZipEntry"
+    - "getNextEntry"
+    - "entry.getName()"
+    - "new File("
+  regexes:
+    - "new\\s+File\\s*\\([^,]+,\\s*[^)]*\\.getName\\s*\\(\\s*\\)"
+    - "ZipEntry\\s+\\w+\\s*=\\s*\\w+\\.getNextEntry\\s*\\("
+
+trigger:
+  description: |
+    App code extracts a zip/archive entry by joining the destination directory
+    with ZipEntry.getName(), but does not verify the canonical target path is
+    still under the intended destination directory.
+  signals:
+    - "ZipInputStream/getNextEntry loop writes files to disk"
+    - "new File(destination, entry.getName()) or equivalent path join"
+    - "missing canonicalPath startsWith(destinationCanonicalPath + separator) check"
+
+risk: |
+  A crafted entry such as ../shared_prefs/session.xml can escape the extraction
+  directory and overwrite app-private files. Depending on the target path this
+  can corrupt trusted state, plant attacker-controlled assets, or become a code
+  execution primitive through later dynamic loading.
+
+suggestion: |
+  Resolve both destination directory and candidate file to canonical paths before
+  writing. Reject entries whose canonical target is not a child of the canonical
+  destination directory, and create parent directories only after that check.
+
+original_case:
+  bug_link: null
+  minimal_repro: |
+    ZipEntry entry;
+    while ((entry = zip.getNextEntry()) != null) {
+        File out = new File(destinationDir, entry.getName());
+        copy(zip, out);
+    }
+  fix_diff: |
+    + File target = newFile(destinationDir, entry);
+    + if (!target.getCanonicalPath().startsWith(destinationDir.getCanonicalPath() + File.separator)) {
+    +     throw new SecurityException("Blocked zip path traversal: " + entry.getName());
+    + }

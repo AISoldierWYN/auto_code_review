@@ -1,0 +1,97 @@
+package com.acme.themes;
+
+import android.content.Context;
+import android.net.Uri;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Locale;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+public final class ThemePackInstaller {
+    private static final long MAX_THEME_BYTES = 8L * 1024L * 1024L;
+
+    private final Context context;
+
+    public ThemePackInstaller(Context context) {
+        this.context = context.getApplicationContext();
+    }
+
+    public File install(Uri packUri, String requestedName) throws IOException {
+        String safeName = sanitizeDisplayName(requestedName);
+        File installRoot = new File(context.getFilesDir(), "themes/" + safeName);
+        if (!installRoot.exists() && !installRoot.mkdirs()) {
+            throw new IOException("Could not create theme directory");
+        }
+
+        long copied = 0L;
+        try (
+            InputStream raw = context.getContentResolver().openInputStream(packUri);
+            ZipInputStream zip = new ZipInputStream(raw)
+        ) {
+            if (raw == null) {
+                throw new IOException("Could not open theme pack");
+            }
+
+            ZipEntry entry;
+            byte[] buffer = new byte[8192];
+            while ((entry = zip.getNextEntry()) != null) {
+                String entryName = entry.getName();
+                if (entryName == null || entryName.trim().isEmpty()) {
+                    zip.closeEntry();
+                    continue;
+                }
+                if (entry.isDirectory()) {
+                    File dir = new File(installRoot, entryName);
+                    if (!dir.exists() && !dir.mkdirs()) {
+                        throw new IOException("Could not create directory " + dir);
+                    }
+                    zip.closeEntry();
+                    continue;
+                }
+                if (!isAllowedAsset(entryName)) {
+                    zip.closeEntry();
+                    continue;
+                }
+
+                File target = new File(installRoot, entryName);
+                File parent = target.getParentFile();
+                if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                    throw new IOException("Could not create parent directory");
+                }
+
+                try (FileOutputStream out = new FileOutputStream(target)) {
+                    int read;
+                    while ((read = zip.read(buffer)) != -1) {
+                        copied += read;
+                        if (copied > MAX_THEME_BYTES) {
+                            throw new IOException("Theme pack is too large");
+                        }
+                        out.write(buffer, 0, read);
+                    }
+                }
+                zip.closeEntry();
+            }
+        }
+
+        return installRoot;
+    }
+
+    private static boolean isAllowedAsset(String name) {
+        String lower = name.toLowerCase(Locale.US);
+        return lower.endsWith(".json")
+            || lower.endsWith(".png")
+            || lower.endsWith(".webp")
+            || lower.endsWith(".ttf");
+    }
+
+    private static String sanitizeDisplayName(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return "default";
+        }
+        return value.replaceAll("[^A-Za-z0-9_.-]", "_");
+    }
+}

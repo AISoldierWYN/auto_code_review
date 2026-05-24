@@ -1,0 +1,10 @@
+name: case_android_app_zip_slip_theme_unpack
+description: Android APP theme pack extraction joins ZipEntry names without canonical child-path validation
+language_hint: java
+expected:
+  findings:
+    - rule_id: RULE-ANDROID-APP-013
+      file: app/src/main/java/com/acme/themes/ThemePackInstaller.java
+      line_range: [38, 71]
+  forbid_other_critical: false
+  summary_substring: ZipEntry

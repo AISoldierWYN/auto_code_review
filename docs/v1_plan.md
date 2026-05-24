@@ -310,7 +310,7 @@ options = ClaudeAgentOptions(
 |------|------|----------|------------|
 | **第 0 步** | SDK 可用性 + 端点切换验证 | 已有 `.env.example`、EndpointConfig、两个 smoke 脚本 | 补强制 `Read/Grep` tool_use smoke；接 pre-commit/CI |
 | **第 1 步** | 跑通最小闭环 | 已完成 diff → rules → prompt → agent → parser → review.json；本地 diff/GitHub PR source 可用 | `before/` + diff 自动生成 `workspace/` 可后置 |
-| **第 2 步** | 规则资产 + 召回质量 | 已有 19 条 `typical_case` 规则、Android case fixtures、L1/L2/L3/L4 召回 | 规则资产审计、bug_history 入口、更多 case、召回质量报告、大 diff 分片 |
+| **第 2 步** | 规则资产 + 召回质量 | 已有 20 条 `typical_case` 规则、Android case fixtures、L1/L2/L3/L4 召回、规则审计与 case 覆盖报告 | bug_history 真实素材、更多 case、大 diff 分片 |
 | **第 3 步** | 结构化输出 + 分级 + 噪音过滤 | 目前靠 fenced YAML + parser 校验 | 输出修复/重试、unknown rule 丢弃、去重、置信度阈值、`report_finding` 工具或 hook |
 | **第 4 步** | 嵌入 MR 流程 | GitHub diff 拉取已提前可用；回写未接 | GitHub/Gerrit/GitLab publisher、webhook/dry-run、评论幂等、可选 gating |
 | **第 5 步** | UI 接入与 reviewer 工作台 | 已有 aiohttp server、`/api/review`、`/api/chat`、本地/GitHub 输入、Markdown chat | 去 mock 化、真实 History/Stats、copy/post 操作、配置持久化、运行记录 |

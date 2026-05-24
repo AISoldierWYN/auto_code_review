@@ -116,6 +116,17 @@ ANDROID_RULE_CASES = [
         ],
     ),
     (
+        "RULE-ANDROID-APP-013",
+        "app/src/main/java/com/acme/themes/ThemePackInstaller.java",
+        [
+            "ZipEntry entry;",
+            "while ((entry = zip.getNextEntry()) != null) {",
+            "    File target = new File(installRoot, entry.getName());",
+            "    copy(zip, target);",
+            "}",
+        ],
+    ),
+    (
         "RULE-ANDROID-FWK-001",
         "frameworks/base/services/core/java/com/android/server/FooService.java",
         [
@@ -197,7 +208,7 @@ def _android_rules_by_id() -> dict[str, Rule]:
 def test_seeded_android_rules_load() -> None:
     rules = _android_rules_by_id()
 
-    assert len(rules) == 18
+    assert len(rules) == 19
     assert all(rule.source.type == "typical_case" for rule in rules.values())
     assert all(rule.recall.keywords or rule.recall.regexes for rule in rules.values())
 
