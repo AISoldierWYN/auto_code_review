@@ -9,7 +9,8 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "verify:stage5": "node scripts/verify_stage5_ui.js",
+    "verify:scroll": "node scripts/verify_ui_scroll.js"
   },
   "keywords": [],
   "author": "",

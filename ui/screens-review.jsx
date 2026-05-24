@@ -13,7 +13,7 @@ function EmptyState({ onSubmit, error }) {
         <p className="empty-sub">
           Paste one of: a local diff file path, a GitHub PR URL, or the
           shorthand <code style={{ fontFamily: "var(--mono)" }}>owner/repo#NN</code>.
-          Gerrit is planned for Stage 4.
+          Gerrit change URLs are supported for review and publish dry-runs.
         </p>
         <div style={{ display: "flex", gap: 8 }}>
           <div className="input" style={{ flex: 1 }}>
@@ -100,7 +100,7 @@ function LoadingState({ url }) {
 }
 
 // ─── Error ─────────────────────────────────────────────────────────────
-function ErrorState({ onRetry, onBack, message }) {
+function ErrorState({ onBack, onSettings, message }) {
   const detail = message && message.length > 0 ? message : "(no detail available)";
   return (
     <div className="center-wrap">
@@ -120,7 +120,7 @@ function ErrorState({ onRetry, onBack, message }) {
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn primary" onClick={onBack}>Try a different path</button>
           <span className="spacer" />
-          <button className="btn ghost">View settings</button>
+          <button className="btn ghost" onClick={onSettings}>View settings</button>
         </div>
       </div>
     </div>
@@ -415,7 +415,7 @@ function SidePanel({ pr, totals, language = "en", dataVersion = 0 }) {
   const [msgs, setMsgs] = React.useState(() => [buildChatIntro(pr, totals, language)]);
   const [isSending, setIsSending] = React.useState(false);
   const scroller = React.useRef(null);
-  const allComments = window.MOCK_ALL_COMMENTS || [];
+  const allComments = window.CURRENT_ALL_COMMENTS || [];
   React.useEffect(() => {
     setMsgs([buildChatIntro(pr, totals, language)]);
     setDraft("");

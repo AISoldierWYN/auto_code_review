@@ -222,3 +222,19 @@ window.MOCK_WEEKLY = [
   { day: "Sat", c: 0, w: 2,  s: 4 },
   { day: "Sun", c: 1, w: 3,  s: 6 },
 ];
+
+window.DEMO_PR = window.MOCK_PR;
+window.DEMO_FILES = window.MOCK_FILES;
+window.DEMO_DIFF = window.MOCK_DIFF;
+window.DEMO_COMMENTS = window.MOCK_COMMENTS;
+window.DEMO_ALL_COMMENTS = window.MOCK_ALL_COMMENTS;
+
+window.CURRENT_PR = window.CURRENT_PR || null;
+window.CURRENT_FILES = window.CURRENT_FILES || [];
+window.CURRENT_DIFF = window.CURRENT_DIFF || [];
+window.CURRENT_COMMENTS = window.CURRENT_COMMENTS || {};
+window.CURRENT_ALL_COMMENTS = window.CURRENT_ALL_COMMENTS || [];
+window.CURRENT_REVIEW_RAW = window.CURRENT_REVIEW_RAW || null;
+window.CURRENT_REVIEW_LANGUAGE = window.CURRENT_REVIEW_LANGUAGE || "zh";
+window.CURRENT_REVIEW_SOURCE = window.CURRENT_REVIEW_SOURCE || "empty";
+window.CURRENT_HISTORY = window.CURRENT_HISTORY || [];

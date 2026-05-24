@@ -16,12 +16,14 @@ function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [route, setRoute] = React.useState("review");
   // Review states: "empty" | "loading" | "result" | "error"
-  const [reviewState, setReviewState] = React.useState("result");
+  const [reviewState, setReviewState] = React.useState(window.CURRENT_PR ? "result" : "empty");
   const [activeFileIdx, setActiveFileIdx] = React.useState(0);
   const [commentStates, setCommentStates] = React.useState({});
   const [errorMsg, setErrorMsg] = React.useState("");
+  const [actionMsg, setActionMsg] = React.useState("");
+  const [isPublishing, setIsPublishing] = React.useState(false);
   // Bumped after a real review lands, to force a re-render that picks up
-  // the updated window.MOCK_* globals.
+  // the updated window.CURRENT_* globals.
   const [dataVersion, setDataVersion] = React.useState(0);
 
   // apply theme + accent
@@ -30,7 +32,7 @@ function App() {
     document.documentElement.style.setProperty("--accent", t.accent);
   }, [t.light, t.accent]);
 
-  // Swap MOCK_DIFF whenever the active file index changes, so the UI
+  // Swap CURRENT_DIFF whenever the active file index changes, so the UI
   // shows hunks for the file the user picked.
   React.useEffect(() => {
     if (typeof window.setActiveDiff === "function") {
@@ -42,8 +44,13 @@ function App() {
     setCommentStates((s) => ({ ...s, [id]: state }));
   };
 
-  const pr = window.MOCK_PR;
-  const totals = window.MOCK_FILES.reduce(
+  const files = window.CURRENT_FILES || [];
+  const pr = window.CURRENT_PR;
+  const hasReview = reviewState === "result" && pr && files.length > 0;
+  const history = window.CURRENT_HISTORY || [];
+  const publishPlatform = window.getCurrentPublishPlatform ? window.getCurrentPublishPlatform() : null;
+  const canPublishGerrit = hasReview && publishPlatform === "gerrit" && !isPublishing;
+  const totals = files.reduce(
     (acc, f) => ({
       c: acc.c + f.sev.critical,
       w: acc.w + f.sev.warning,
@@ -60,12 +67,43 @@ function App() {
     try {
       await window.runRealReview(input, { reviewLanguage: t.commentLanguage });
       setActiveFileIdx(0);
+      setCommentStates({});
+      setActionMsg("");
       setDataVersion((v) => v + 1);
       setReviewState("result");
     } catch (e) {
       console.error("review failed", e);
       setErrorMsg(e && e.message ? e.message : String(e));
       setReviewState("error");
+    }
+  };
+
+  const copySummary = async () => {
+    if (!hasReview || !window.copyCurrentSummary) return;
+    try {
+      await window.copyCurrentSummary();
+      setActionMsg(t.commentLanguage === "zh" ? "summary 已复制" : "summary copied");
+    } catch (e) {
+      setActionMsg(e && e.message ? e.message : String(e));
+    }
+  };
+
+  const publishToGerrit = async () => {
+    if (!canPublishGerrit || !window.publishCurrentReview) return;
+    setIsPublishing(true);
+    setActionMsg(t.commentLanguage === "zh" ? "生成 Gerrit draft payload..." : "building Gerrit draft payload...");
+    try {
+      const result = await window.publishCurrentReview({ platform: "gerrit", mode: "draft" });
+      const action = result.action || "dry_run";
+      setActionMsg(
+        t.commentLanguage === "zh"
+          ? `Gerrit ${action} 已就绪，未提交真实评论`
+          : `Gerrit ${action} ready; no live comment submitted`
+      );
+    } catch (e) {
+      setActionMsg(e && e.message ? e.message : String(e));
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -82,12 +120,12 @@ function App() {
           <button className={`nav-item ${route === "review" ? "active" : ""}`} onClick={() => setRoute("review")}>
             <Ico.Review className="ico" />
             <span>Review</span>
-            {reviewState === "result" && <span className="count">1</span>}
+            {hasReview && <span className="count">{files.length}</span>}
           </button>
           <button className={`nav-item ${route === "history" ? "active" : ""}`} onClick={() => setRoute("history")}>
             <Ico.History className="ico" />
             <span>History</span>
-            <span className="count">{window.MOCK_HISTORY.length}</span>
+            <span className="count">{history.length}</span>
           </button>
           <button className={`nav-item ${route === "stats" ? "active" : ""}`} onClick={() => setRoute("stats")}>
             <Ico.Stats className="ico" />
@@ -98,31 +136,12 @@ function App() {
           <button className={`nav-item ${route === "team" ? "active" : ""}`} onClick={() => setRoute("team")}>
             <Ico.Team className="ico" />
             <span>Team</span>
-            <span className="count">{window.MOCK_TEAM.length}</span>
+            <span className="count">0</span>
           </button>
           <button className={`nav-item ${route === "settings" ? "active" : ""}`} onClick={() => setRoute("settings")}>
             <Ico.Settings className="ico" />
             <span>Settings</span>
           </button>
-
-          <div className="nav-section">Demo · review states</div>
-          {[
-            ["result", "Result"],
-            ["loading", "Loading"],
-            ["empty", "Empty"],
-            ["error", "Error"],
-          ].map(([k, label]) => (
-            <button key={k}
-              className={`nav-item ${route === "review" && reviewState === k ? "active" : ""}`}
-              onClick={() => { setRoute("review"); setReviewState(k); }}>
-              <span className="ico" style={{
-                width: 8, height: 8, borderRadius: "50%",
-                background: reviewState === k && route === "review" ? "var(--accent)" : "var(--faint)",
-                margin: "0 3px",
-              }} />
-              <span style={{ fontSize: 12 }}>{label}</span>
-            </button>
-          ))}
         </nav>
         <div className="sidebar-foot">
           <span className="avatar">LW</span>
@@ -139,7 +158,7 @@ function App() {
             <span>workspace</span>
             <span className="sep">/</span>
             <span style={{ textTransform: "capitalize" }} className={route === "review" ? "here" : ""}>{route}</span>
-            {route === "review" && reviewState === "result" && (
+            {route === "review" && hasReview && (
               <React.Fragment>
                 <span className="sep">/</span>
                 <span className="here">CL #{pr.cl}</span>
@@ -147,14 +166,22 @@ function App() {
             )}
           </div>
           <div className="topbar-actions">
-            {route === "review" && reviewState === "result" && (
+            {route === "review" && hasReview && (
               <React.Fragment>
                 <div style={{ display: "flex", gap: 4, background: "var(--panel-2)", border: "1px solid var(--border)", padding: 2, borderRadius: 6 }}>
                   <button className={`btn sm ${t.viewMode === "byFile" ? "primary" : "ghost"}`} style={{ height: 22, border: 0 }} onClick={() => setTweak("viewMode", "byFile")}>by file</button>
                   <button className={`btn sm ${t.viewMode === "bySeverity" ? "primary" : "ghost"}`} style={{ height: 22, border: 0 }} onClick={() => setTweak("viewMode", "bySeverity")}>by severity</button>
                 </div>
-                <button className="btn"><Ico.Copy className="ico" />copy summary</button>
-                <button className="btn primary"><Ico.Arrow className="ico" />post to gerrit</button>
+                <button className="btn" onClick={copySummary}><Ico.Copy className="ico" />copy summary</button>
+                <button
+                  className="btn primary"
+                  onClick={publishToGerrit}
+                  disabled={!canPublishGerrit}
+                  title={canPublishGerrit ? "Generate Gerrit draft payload" : "Available after loading a Gerrit change"}
+                >
+                  <Ico.Arrow className="ico" />post to gerrit
+                </button>
+                {actionMsg && <span className="action-msg">{actionMsg}</span>}
               </React.Fragment>
             )}
             {route !== "review" && (
@@ -179,27 +206,27 @@ function App() {
           {route === "review" && reviewState === "error" && (
             <ErrorState
               message={errorMsg}
-              onRetry={() => setReviewState("loading")}
               onBack={() => setReviewState("empty")}
+              onSettings={() => setRoute("settings")}
             />
           )}
-          {route === "review" && reviewState === "result" && (
+          {route === "review" && hasReview && (
             <div className="review-layout">
-              <FileList files={window.MOCK_FILES} activeIdx={activeFileIdx} setActiveIdx={setActiveFileIdx} />
+              <FileList files={files} activeIdx={activeFileIdx} setActiveIdx={setActiveFileIdx} />
               <div className="review-mid">
                 <PrHeader pr={pr} totals={totals} />
                 {t.viewMode === "byFile" ? (
                   <FileDiff
-                    file={window.MOCK_FILES[activeFileIdx]}
-                    diff={window.MOCK_DIFF}
-                    comments={window.MOCK_COMMENTS}
+                    file={files[activeFileIdx]}
+                    diff={window.CURRENT_DIFF}
+                    comments={window.CURRENT_COMMENTS}
                     commentStates={commentStates}
                     setCommentState={setCommentState}
                     showConfidence={t.showConfidence}
                   />
                 ) : (
                   <BySeverity
-                    allComments={window.MOCK_ALL_COMMENTS}
+                    allComments={window.CURRENT_ALL_COMMENTS}
                     commentStates={commentStates}
                     setCommentState={setCommentState}
                     showConfidence={t.showConfidence}
@@ -233,10 +260,6 @@ function App() {
         <TweakColor label="Accent" value={t.accent}
           options={["#74b9ff", "#7fcf9f", "#f0c674", "#c78bff", "#ff8b6b"]}
           onChange={(v) => setTweak("accent", v)} />
-        <TweakSection label="Demo state" />
-        <TweakRadio label="Review state" value={reviewState}
-          options={["result", "loading", "empty", "error"]}
-          onChange={(v) => { setRoute("review"); setReviewState(v); }} />
       </TweaksPanel>
     </div>
   );

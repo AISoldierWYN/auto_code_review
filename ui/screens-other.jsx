@@ -2,7 +2,15 @@
 
 // ─── History ────────────────────────────────────────────────────────────
 function HistoryScreen() {
-  const rows = window.MOCK_HISTORY;
+  const rows = window.CURRENT_HISTORY || [];
+  if (rows.length === 0) {
+    return (
+      <div className="panel-empty">
+        <h3>No review runs yet</h3>
+        <p>Run a local diff, GitHub PR, or Gerrit CL from the Review page. Completed runs will appear here for this browser session.</p>
+      </div>
+    );
+  }
   return (
     <div className="tbl-wrap">
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -10,10 +18,10 @@ function HistoryScreen() {
           <Ico.Search className="ico" />
           <input placeholder="filter by CL, repo, author…" />
         </div>
-        <button className="btn"><Ico.Filter className="ico" />status: all</button>
-        <button className="btn">repo: all</button>
+        <button className="btn" disabled><Ico.Filter className="ico" />status: all</button>
+        <button className="btn" disabled>repo: all</button>
         <span className="spacer" />
-        <button className="btn"><Ico.Plus className="ico" />new review</button>
+        <button className="btn" disabled><Ico.Plus className="ico" />new review</button>
       </div>
       <table className="tbl">
         <thead>
@@ -48,7 +56,7 @@ function HistoryScreen() {
                 </div>
               </td>
               <td>
-                <span className={`chip ${r.status === "merged" ? "suggestion" : r.status === "changes" ? "critical" : "accent"}`}>
+                <span className="chip accent">
                   <span className="dot" />{r.status}
                 </span>
               </td>
@@ -63,171 +71,73 @@ function HistoryScreen() {
 
 // ─── Team ───────────────────────────────────────────────────────────────
 function TeamScreen() {
-  const team = window.MOCK_TEAM;
   return (
-    <div>
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="l">Active reviewers</div>
-          <div className="v">{team.length}</div>
-          <div className="d up">+2 this quarter</div>
-        </div>
-        <div className="stat-card">
-          <div className="l">Reviews this week</div>
-          <div className="v">214</div>
-          <div className="d up">+18%</div>
-        </div>
-        <div className="stat-card">
-          <div className="l">Avg accept rate</div>
-          <div className="v">72%</div>
-          <div className="d up">+4pp</div>
-        </div>
-        <div className="stat-card">
-          <div className="l">Avg review time</div>
-          <div className="v">9.8s</div>
-          <div className="d down">+0.6s</div>
-        </div>
-      </div>
-      <div className="section-head" style={{ padding: "20px 24px 0" }}>
-        <span>Members</span>
-        <span className="grow" />
-        <button className="btn sm"><Ico.Plus className="ico" />invite</button>
-      </div>
-      <div className="team-grid">
-        {team.map((p) => (
-          <div key={p.name} className="team-card">
-            <div className="head">
-              <span className="avatar">{p.initials}</span>
-              <div>
-                <div className="nm">{p.name}</div>
-                <div className="rl">{p.role}</div>
-              </div>
-              <span className="spacer" />
-              <button className="btn sm ghost">View</button>
-            </div>
-            <div className="meta">
-              <div className="col">
-                <span className="k">reviews</span>
-                <span className="v">{p.reviews}</span>
-              </div>
-              <div className="col">
-                <span className="k">accepted</span>
-                <span className="v" style={{ color: "var(--suggestion)" }}>{p.accepted}</span>
-              </div>
-              <div className="col">
-                <span className="k">avg time</span>
-                <span className="v">{p.avg}</span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+    <div className="panel-empty">
+      <h3>Organization data is not connected</h3>
+      <p>Team membership and reviewer metrics need a real org directory or review platform API. Demo names are hidden here to keep production runs unambiguous.</p>
     </div>
   );
 }
 
 // ─── Stats ──────────────────────────────────────────────────────────────
 function StatsScreen() {
-  const week = window.MOCK_WEEKLY;
-  const max = Math.max(...week.map((d) => d.c + d.w + d.s));
-  // donut
-  const breakdown = [
-    { name: "null safety", v: 24, c: "var(--critical)" },
-    { name: "concurrency", v: 18, c: "var(--warning)" },
-    { name: "API design", v: 14, c: "var(--accent)" },
-    { name: "performance", v: 11, c: "var(--suggestion)" },
-    { name: "tests", v: 9, c: "var(--muted)" },
-  ];
-  const total = breakdown.reduce((a, b) => a + b.v, 0);
-  let cum = 0;
-  const R = 36, C = 2 * Math.PI * R;
+  const rows = window.CURRENT_HISTORY || [];
+  const totals = rows.reduce(
+    (acc, row) => ({
+      runs: acc.runs + 1,
+      c: acc.c + (row.sev?.c || 0),
+      w: acc.w + (row.sev?.w || 0),
+      s: acc.s + (row.sev?.s || 0),
+    }),
+    { runs: 0, c: 0, w: 0, s: 0 }
+  );
+  if (rows.length === 0) {
+    return (
+      <div className="panel-empty">
+        <h3>No local stats yet</h3>
+        <p>Stats are derived from real review runs in this browser. Run a review first, then this page will summarize the resulting findings.</p>
+      </div>
+    );
+  }
   return (
     <div>
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="l">Reviews · 7d</div>
-          <div className="v">214</div>
-          <div className="d up">↑ 18% vs prev</div>
+          <div className="l">Review runs</div>
+          <div className="v">{totals.runs}</div>
+          <div className="d">local browser history</div>
         </div>
         <div className="stat-card">
-          <div className="l">Findings · 7d</div>
-          <div className="v">312</div>
-          <div className="d down">↑ 12%</div>
+          <div className="l">Findings</div>
+          <div className="v">{totals.c + totals.w + totals.s}</div>
+          <div className="d">all severities</div>
         </div>
         <div className="stat-card">
-          <div className="l">Critical caught</div>
-          <div className="v" style={{ color: "var(--critical)" }}>16</div>
-          <div className="d">11 fixed, 5 dismissed</div>
+          <div className="l">Critical</div>
+          <div className="v" style={{ color: "var(--critical)" }}>{totals.c}</div>
+          <div className="d">must-fix findings</div>
         </div>
         <div className="stat-card">
-          <div className="l">Median scan time</div>
-          <div className="v">8.4<span style={{ fontSize: 14, color: "var(--muted)", marginLeft: 4 }}>s</span></div>
-          <div className="d up">↓ 1.2s</div>
+          <div className="l">Latest source</div>
+          <div className="v" style={{ fontSize: 20 }}>{rows[0].source || "local"}</div>
+          <div className="d">{rows[0].at}</div>
         </div>
       </div>
       <div className="chart-row">
         <div className="chart-card">
-          <h4>
-            <span>Findings by day</span>
-            <span className="sub">past 7 days · stacked</span>
-          </h4>
-          <div className="bars-wrap">
-            <div className="bars">
-              {week.map((d) => {
-                const tot = d.c + d.w + d.s;
-                const h = (tot / max) * 140;
-                return (
-                  <div key={d.day} className="bar" style={{ height: h + "px" }} title={`${d.day} · ${tot}`}>
-                    <span className="seg crit" style={{ height: (d.c / tot * h) + "px" }} />
-                    <span className="seg warn" style={{ height: (d.w / tot * h) + "px" }} />
-                    <span className="seg sugg" style={{ height: (d.s / tot * h) + "px" }} />
-                    <span className="lbl">{d.day}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <div className="legend">
-            <span className="item"><span className="dot" style={{ background: "var(--critical)" }} />critical</span>
-            <span className="item"><span className="dot" style={{ background: "var(--warning)" }} />warning</span>
-            <span className="item"><span className="dot" style={{ background: "var(--suggestion)" }} />suggestion</span>
-          </div>
-        </div>
-        <div className="chart-card">
-          <h4>
-            <span>Top categories</span>
-            <span className="sub">7d</span>
-          </h4>
-          <div className="donut-wrap">
-            <svg viewBox="0 0 100 100" width="110" height="110">
-              <circle cx="50" cy="50" r={R} fill="none" stroke="var(--panel-2)" strokeWidth="12" />
-              {breakdown.map((b) => {
-                const frac = b.v / total;
-                const len = frac * C;
-                const off = -cum;
-                cum += len;
-                return (
-                  <circle key={b.name} cx="50" cy="50" r={R} fill="none"
-                    stroke={b.c} strokeWidth="12"
-                    strokeDasharray={`${len} ${C - len}`}
-                    strokeDashoffset={off}
-                    transform="rotate(-90 50 50)"
-                  />
-                );
-              })}
-              <text x="50" y="48" textAnchor="middle" fill="var(--text)" style={{ font: "600 14px var(--mono)" }}>{total}</text>
-              <text x="50" y="60" textAnchor="middle" fill="var(--muted)" style={{ font: "10px var(--mono)" }}>findings</text>
-            </svg>
-            <div className="donut-list">
-              {breakdown.map((b) => (
-                <div key={b.name} className="row">
-                  <span className="dot" style={{ background: b.c }} />
-                  <span className="name">{b.name}</span>
-                  <span className="v">{b.v}</span>
-                </div>
+          <h4><span>Recent runs</span><span className="sub">local</span></h4>
+          <table className="tbl compact">
+            <tbody>
+              {rows.slice(0, 8).map((row) => (
+                <tr key={`${row.cl}-${row.createdAt || row.at}`}>
+                  <td className="mono">#{row.cl}</td>
+                  <td>{row.title}</td>
+                  <td className="mono">{row.sev.c}/{row.sev.w}/{row.sev.s}</td>
+                  <td className="mono">{row.source}</td>
+                </tr>
               ))}
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -236,37 +146,37 @@ function StatsScreen() {
 
 // ─── Settings ───────────────────────────────────────────────────────────
 function SettingsScreen({ tweak, setTweak }) {
-  const Tog = ({ on, onClick }) => (
-    <span className={`toggle ${on ? "on" : ""}`} onClick={onClick} />
+  const Tog = ({ on, onClick, disabled }) => (
+    <span className={`toggle ${on ? "on" : ""} ${disabled ? "disabled" : ""}`} onClick={disabled ? undefined : onClick} />
   );
+  const currentTarget = window.CURRENT_PR?.id || "No review loaded";
+  const currentPlatform = window.getCurrentPublishPlatform ? (window.getCurrentPublishPlatform() || "local") : "local";
   return (
     <div className="set-wrap">
       <div className="set-section">
         <h3>Source</h3>
         <div className="set-row">
           <div className="l">
-            <div>Gerrit host</div>
-            <div className="desc">Where kit fetches changes from. OAuth token configured.</div>
+            <div>Current target</div>
+            <div className="desc">Loaded from the latest review run.</div>
           </div>
           <div className="input" style={{ width: 320 }}>
-            <input defaultValue="https://gerrit.internal.corp" />
+            <input value={currentTarget} readOnly />
           </div>
         </div>
         <div className="set-row">
           <div className="l">
-            <div>GitHub Enterprise</div>
-            <div className="desc">Optional fallback host. Not connected.</div>
+            <div>Detected platform</div>
+            <div className="desc">Used by publish dry-run actions.</div>
           </div>
-          <button className="btn">Connect</button>
+          <span className="chip accent"><span className="dot" />{currentPlatform}</span>
         </div>
         <div className="set-row">
           <div className="l">
-            <div>Default project</div>
-            <div className="desc">Used when a link omits the project slug.</div>
+            <div>Server endpoints</div>
+            <div className="desc">Review, chat, and publish are served by the local aiohttp process.</div>
           </div>
-          <div className="input" style={{ width: 320 }}>
-            <input defaultValue="platform/payments-svc" />
-          </div>
+          <span className="chip"><span className="dot" />/api/review · /api/chat · /api/publish</span>
         </div>
       </div>
 
@@ -275,10 +185,10 @@ function SettingsScreen({ tweak, setTweak }) {
         <div className="set-row">
           <div className="l">
             <div>Model</div>
-            <div className="desc">Used for all analysis passes.</div>
+            <div className="desc">Resolved on the server from `.env` endpoint settings.</div>
           </div>
           <div className="input" style={{ width: 240 }}>
-            <input defaultValue="claude-haiku-4.5" />
+            <input value="server configured" readOnly />
           </div>
         </div>
         <div className="set-row">
@@ -294,23 +204,23 @@ function SettingsScreen({ tweak, setTweak }) {
         <div className="set-row">
           <div className="l">
             <div>Auto-post to Gerrit</div>
-            <div className="desc">Land kit's findings as draft comments on the change.</div>
+            <div className="desc">Disabled by default; the toolbar generates a draft payload first.</div>
           </div>
-          <Tog on={true} />
+          <Tog on={false} disabled />
         </div>
         <div className="set-row">
           <div className="l">
             <div>Block on critical</div>
-            <div className="desc">Set CodeReview −1 when any critical finding is present.</div>
+            <div className="desc">Gating is intentionally off until production credentials are configured.</div>
           </div>
-          <Tog on={true} />
+          <Tog on={false} disabled />
         </div>
         <div className="set-row">
           <div className="l">
             <div>Include suggestion-tier findings</div>
-            <div className="desc">Nice-to-haves are posted but folded by default.</div>
+            <div className="desc">All validated findings stay visible in the report and publish payload.</div>
           </div>
-          <Tog on={false} />
+          <Tog on={true} disabled />
         </div>
       </div>
 

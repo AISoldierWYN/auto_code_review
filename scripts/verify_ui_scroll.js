@@ -198,7 +198,7 @@ function serve() {
     });
 
     await page.goto(targetUrl, { waitUntil: "networkidle" });
-    await page.getByText("Empty").click();
+    await page.locator(".empty-card").waitFor({ timeout: 10000 });
     await page.locator(".empty-card input").fill("tests/cases/case_android_app_main_thread_refresh_io/change.diff");
     await page.locator(".empty-card .btn.primary").click();
     await page.locator(".file-block").waitFor({ timeout: 10000 });

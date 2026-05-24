@@ -1,15 +1,17 @@
 /* glue.js — connects the UI to the backend (scripts/serve.py).
  *
  * window.runRealReview(input) calls POST /api/review, then writes the
- * response into the same window.MOCK_* globals that the demo data.js
- * uses. After it returns, the UI re-renders with real data.
+ * response into CURRENT_* globals. Demo data stays available only as an
+ * explicit fallback and is not mixed into a real review.
  *
  * The input may be:
  *   - a local diff file path (e.g. tests/cases/case_resource_leak/change.diff)
- *   - eventually a Gerrit / GitHub URL (deferred to Stage 4 DiffSource adapters)
+ *   - a Gerrit / GitHub URL when the matching DiffSource is available
  */
 
 (function () {
+  const HISTORY_KEY = "kit.reviewHistory.v1";
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -212,9 +214,52 @@
     return `${Math.round(s)}s`;
   }
 
+  function safeJsonParse(value, fallback) {
+    try {
+      return JSON.parse(value);
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function readHistory() {
+    const raw = window.localStorage ? window.localStorage.getItem(HISTORY_KEY) : null;
+    const parsed = raw ? safeJsonParse(raw, []) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  }
+
+  function saveHistory(rows) {
+    window.CURRENT_HISTORY = rows.slice(0, 40);
+    if (window.localStorage) {
+      window.localStorage.setItem(HISTORY_KEY, JSON.stringify(window.CURRENT_HISTORY));
+    }
+  }
+
+  function severityTotals(files) {
+    return (files || []).reduce(
+      (acc, f) => ({
+        c: acc.c + (f.sev?.critical || 0),
+        w: acc.w + (f.sev?.warning || 0),
+        s: acc.s + (f.sev?.suggestion || 0),
+      }),
+      { c: 0, w: 0, s: 0 }
+    );
+  }
+
   function fileBasename(path) {
     if (!path) return "";
     return path.split(/[\\/]/).pop();
+  }
+
+  function changeLabel(path) {
+    const value = String(path || "");
+    const gerrit = /\/\+\/([^/?#]+)(?:\/[^/?#]+)?/.exec(value)
+      || /\/changes\/([^/?#]+)/.exec(value);
+    if (gerrit) return gerrit[1];
+    const github = /github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/.exec(value)
+      || /^[\w.-]+\/[\w.-]+#(\d+)$/.exec(value);
+    if (github) return github[1];
+    return fileBasename(value) || value || "(unknown)";
   }
 
   function transformPr(review) {
@@ -222,7 +267,7 @@
     const path = m.diff_path || "";
     // UI uses {cl} for Gerrit change-list number. v1 substitutes the diff
     // file path (basename) so the header still has something to show.
-    const clDisplay = fileBasename(path) || path || "(unknown)";
+    const clDisplay = changeLabel(path);
     const author = m.author || { name: "—", role: "", initials: "—" };
     return {
       id: path,
@@ -243,6 +288,7 @@
       model: m.model || "—",
       scanned: fmtSeconds(m.scanned_seconds),
       summary: m.summary || "",
+      sourceKind: inferPlatform(path) || "local",
     };
   }
 
@@ -287,18 +333,19 @@
   }
 
   function buildCurrentReviewSnapshot() {
+    if (window.CURRENT_REVIEW_RAW) return window.CURRENT_REVIEW_RAW;
     return {
       schema_version: "1.0",
       review: {
-        diff_path: window.MOCK_PR?.id || "",
-        title: window.MOCK_PR?.title || "",
-        branch: window.MOCK_PR?.branch || null,
-        target: window.MOCK_PR?.target || null,
-        repo: window.MOCK_PR?.repo || null,
-        summary: window.MOCK_PR?.summary || "",
-        language: window.MOCK_REVIEW_LANGUAGE || "en",
+        diff_path: window.CURRENT_PR?.id || "",
+        title: window.CURRENT_PR?.title || "",
+        branch: window.CURRENT_PR?.branch || null,
+        target: window.CURRENT_PR?.target || null,
+        repo: window.CURRENT_PR?.repo || null,
+        summary: window.CURRENT_PR?.summary || "",
+        language: window.CURRENT_REVIEW_LANGUAGE || "zh",
       },
-      files: (window.MOCK_FILES || []).map((f) => ({
+      files: (window.CURRENT_FILES || []).map((f) => ({
         path: f.path,
         lang: f.lang,
         add: f.add,
@@ -306,7 +353,7 @@
         sev: f.sev,
         diff_hunks: f.diff_hunks || [],
       })),
-      findings: Object.entries(window.MOCK_COMMENTS || {}).map(([id, c]) => ({
+      findings: Object.entries(window.CURRENT_COMMENTS || {}).map(([id, c]) => ({
         id,
         severity: c.severity,
         file: c.file,
@@ -316,6 +363,30 @@
         body: c.body,
         suggestion: c.suggestion || null,
       })),
+    };
+  }
+
+  function inferPlatform(target) {
+    const value = String(target || "");
+    if (value.includes("github.com/") || /^[\w.-]+\/[\w.-]+#\d+$/.test(value)) return "github";
+    if (value.includes("/c/") || value.includes("/changes/")) return "gerrit";
+    return null;
+  }
+
+  function historyEntryFromReview(review, pr, files) {
+    const totals = severityTotals(files);
+    const author = pr.author?.initials || pr.author?.name || "—";
+    return {
+      cl: pr.cl,
+      title: pr.title,
+      repo: pr.repo,
+      author,
+      branch: pr.branch,
+      at: "just now",
+      createdAt: new Date().toISOString(),
+      sev: totals,
+      status: "reviewed",
+      source: pr.sourceKind || inferPlatform(review.review?.diff_path) || "local",
     };
   }
 
@@ -341,15 +412,18 @@
       throw new Error(detail);
     }
     const review = await resp.json();
+    const files = transformFiles(review.files);
+    const pr = transformPr(review);
 
-    window.MOCK_PR = transformPr(review);
-    window.MOCK_FILES = transformFiles(review.files);
-    // MOCK_DIFF is the active file's hunks; default to file 0.
-    window.MOCK_DIFF = window.MOCK_FILES[0] ? window.MOCK_FILES[0].diff_hunks : [];
-    window.MOCK_COMMENTS = transformComments(review.findings);
-    window.MOCK_ALL_COMMENTS = transformAllComments(review.findings);
-    window.MOCK_REVIEW_RAW = review;
-    window.MOCK_REVIEW_LANGUAGE = review.review?.language || body.review_language;
+    window.CURRENT_PR = pr;
+    window.CURRENT_FILES = files;
+    window.CURRENT_DIFF = files[0] ? files[0].diff_hunks : [];
+    window.CURRENT_COMMENTS = transformComments(review.findings);
+    window.CURRENT_ALL_COMMENTS = transformAllComments(review.findings);
+    window.CURRENT_REVIEW_RAW = review;
+    window.CURRENT_REVIEW_LANGUAGE = review.review?.language || body.review_language;
+    window.CURRENT_REVIEW_SOURCE = "real";
+    saveHistory([historyEntryFromReview(review, pr, files), ...readHistory()]);
 
     return review;
   }
@@ -375,8 +449,8 @@
   }
 
   async function askReviewChat(question, options = {}) {
-    const language = options.reviewLanguage || window.MOCK_REVIEW_LANGUAGE || "en";
-    const review = window.MOCK_REVIEW_RAW || buildCurrentReviewSnapshot();
+    const language = options.reviewLanguage || window.CURRENT_REVIEW_LANGUAGE || "zh";
+    const review = buildCurrentReviewSnapshot();
     const resp = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -393,15 +467,77 @@
     return data.answer || localChatFallback(question, review, language);
   }
 
+  function buildReviewSummaryText() {
+    const review = buildCurrentReviewSnapshot();
+    const meta = review.review || {};
+    const findings = review.findings || [];
+    const totals = severityTotals(review.files || []);
+    const lines = [
+      "AI Code Review",
+      "",
+      meta.title || meta.diff_path || "Current review",
+      meta.summary || "",
+      "",
+      `Findings: ${findings.length} (critical ${totals.c}, warning ${totals.w}, suggestion ${totals.s})`,
+    ];
+    if (findings.length) {
+      lines.push("", "Findings:");
+      for (const f of findings) {
+        lines.push(`- ${f.severity} ${f.rule_id || ""} ${f.file}:${f.line} - ${f.title}`);
+      }
+    }
+    return lines.filter((line, idx) => line || idx < 2).join("\n");
+  }
+
+  async function copyCurrentSummary() {
+    const text = buildReviewSummaryText();
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return text;
+    }
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.position = "fixed";
+    area.style.left = "-9999px";
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+    return text;
+  }
+
+  async function publishCurrentReview(options = {}) {
+    const review = buildCurrentReviewSnapshot();
+    const target = options.target || review.review?.diff_path || "";
+    const platform = options.platform || inferPlatform(target);
+    if (!platform) throw new Error("Cannot infer publish platform from current review target.");
+    const resp = await fetch("/api/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        review,
+        target,
+        platform,
+        mode: options.mode || "dry_run",
+      }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    window.CURRENT_PUBLISH_RESULT = data;
+    return data;
+  }
+
   window.runRealReview = runRealReview;
   window.askReviewChat = askReviewChat;
+  window.copyCurrentSummary = copyCurrentSummary;
+  window.publishCurrentReview = publishCurrentReview;
+  window.getCurrentPublishPlatform = () => inferPlatform(window.CURRENT_PR?.id || "");
   window.renderChatText = renderMarkdown;
-  window.MOCK_REVIEW_RAW = window.MOCK_REVIEW_RAW || buildCurrentReviewSnapshot();
-  window.MOCK_REVIEW_LANGUAGE = window.MOCK_REVIEW_LANGUAGE || "en";
-  // Expose helpers for app.jsx to swap active file's diff_hunks into MOCK_DIFF.
+  window.CURRENT_HISTORY = readHistory();
+  // Expose helpers for app.jsx to swap active file's diff_hunks into CURRENT_DIFF.
   window.setActiveDiff = function (idx) {
-    if (window.MOCK_FILES && window.MOCK_FILES[idx]) {
-      window.MOCK_DIFF = window.MOCK_FILES[idx].diff_hunks || [];
+    if (window.CURRENT_FILES && window.CURRENT_FILES[idx]) {
+      window.CURRENT_DIFF = window.CURRENT_FILES[idx].diff_hunks || [];
     }
   };
 })();

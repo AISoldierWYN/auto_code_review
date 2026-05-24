@@ -313,7 +313,7 @@ options = ClaudeAgentOptions(
 | **第 2 步** | 规则资产 + 召回质量 | 已完成:20 条 `typical_case` 规则、Android case fixtures、L1/L2/L3/L4 召回、规则审计、case 覆盖、negative case、按文件分片 plan | 持续运营:bug_history 真实素材、更多 case、UI 展示 |
 | **第 3 步** | 结构化输出 + 分级 + 噪音过滤 | 已完成:fenced YAML parser、parse repair、validator/filter、filtered metadata、去重与置信度阈值 | 中期增强:`report_finding` 工具或 hook |
 | **第 4 步** | 嵌入 MR 流程 | 已完成:GitHub/Gerrit DiffSource、ReviewPublisher 抽象、GitHub summary 回写、Gerrit review payload、CLI/HTTP dry-run、fingerprint 幂等 | 生产化增强:真实平台 live auth 验证、webhook、GitLab、GitHub inline comment、可选 gating |
-| **第 5 步** | UI 接入与 reviewer 工作台 | 已有 aiohttp server、`/api/review`、`/api/chat`、本地/GitHub 输入、Markdown chat | 去 mock 化、真实 History/Stats、copy/post 操作、配置持久化、运行记录 |
+| **第 5 步** | UI 接入与 reviewer 工作台 | 已完成:默认 Empty、真实 review runtime、Markdown chat、copy summary、Gerrit publish draft payload、History/Stats 本地真实记录、Playwright 验证 | 生产化增强:后端 run store、真实 Team/组织 API、Apply/Dismiss/Reply 平台回写、真实 submit/gating |
 
 ### Stage 2 详细计划:规则资产与召回质量
 
@@ -401,26 +401,26 @@ Stage 4 完成标准:
 当前 UI 已经从原计划的静态 JSON 提前升级为本地 aiohttp server。Stage 5 目标改为"真实 reviewer 工作台"。
 
 1. **数据源去 mock**
-   - `data.js` 仅作为 demo fallback。
-   - Result 页面全部从 `/api/review` 返回的 report 驱动。
-   - History/Stats/Team 移除假业务数据,改为真实 runs 存储或明确 demo 标签。
+   - 已完成:`data.js` 仅作为 demo fallback,默认不渲染 demo review。
+   - 已完成:Result 页面全部从 `/api/review` 返回的 report 驱动。
+   - 已完成:History/Stats 改为本地真实 runs 记录;Team 移除假业务数据并显示未接入空态。
 2. **操作接实**
-   - `copy summary`:复制当前 report summary/Gerrit summary。
-   - `post to gerrit`:调用 Stage 4 publisher dry-run/submit。
+   - 已完成 `copy summary`:复制当前 report summary。
+   - 已完成 `post to gerrit`:调用 Stage 4 publisher draft payload;非 Gerrit target 显式 disabled。
    - Apply/Dismiss/Reply:先本地状态持久化,后续接平台评论线程。
 3. **配置持久化**
-   - Review language、rules_dir、默认 source、模型配置进入本地配置文件或 server state。
-   - Settings 页面展示真实配置来源,不再展示不可用 host 假数据。
+   - 已完成 Review language 前端偏好持久化;模型/source 配置继续由 server `.env` 和当前 review target 决定。
+   - 已完成 Settings 页面展示真实配置来源,不再展示不可用 host 假数据。
 4. **Chat 工作流**
-   - `/api/chat` 已可用,继续限制在当前 report/workspace 上下文。
-   - 支持 Markdown 渲染,保留 HTML escape。
+   - 已完成 `/api/chat` 限制在当前 report/workspace 上下文。
+   - 已完成 Markdown 渲染,保留 HTML escape。
    - 后续支持"解释这条 finding 为什么触发"并展开原始案例。
 
 Stage 5 完成标准:
 
-- UI 不再把 demo 数据混入真实 review。
-- 核心按钮有真实行为或显式 disabled。
-- Chrome/Playwright 覆盖滚动、chat、summary、view mode、language。
+- UI 不再把 demo 数据混入真实 review。当前默认 Empty,真实 review 后才填充 `CURRENT_*`。
+- 核心按钮有真实行为或显式 disabled。`copy summary` 可复制,`post to gerrit` 只对 Gerrit target 启用。
+- Chrome/Playwright 覆盖滚动、chat、summary、view mode、language。见 `scripts/verify_stage5_ui.js`。
 
 ---
 
